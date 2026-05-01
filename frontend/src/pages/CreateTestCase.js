@@ -64,7 +64,7 @@ function CreateTestCase() {
     setMessage({ type: '', text: '' });
     
     try {
-      const response = await axios.post('http://localhost:6000/api/testcases', {
+      const response = await axios.post('/api/testcases', {
         name: name.trim(),
         preconditions: preconditions,
         steps: steps,
