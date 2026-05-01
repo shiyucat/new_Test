@@ -17,8 +17,8 @@ class TestCase(db.Model):
     preconditions = db.Column(db.Text, nullable=True)
     steps = db.Column(db.Text, nullable=False)
     expected_results = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     def to_dict(self):
         return {
