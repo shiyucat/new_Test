@@ -14,7 +14,7 @@ function TestCaseList() {
   const fetchTestCases = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:5000/api/testcases');
+      const response = await axios.get('http://localhost:6000/api/testcases');
       setTestCases(response.data);
       setError('');
     } catch (err) {
