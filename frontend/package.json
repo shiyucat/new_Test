@@ -2,6 +2,7 @@
   "name": "test-platform-frontend",
   "version": "1.0.0",
   "description": "测试平台前端",
+  "proxy": "http://localhost:6000",
   "main": "index.js",
   "scripts": {
     "start": "PORT=4000 react-scripts start",
