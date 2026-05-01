@@ -50,7 +50,6 @@ function TestCaseList() {
             <div className="table-row">
               <div>用例名称</div>
               <div>创建时间</div>
-              <div>步骤数量</div>
             </div>
           </div>
           <div className="table-body">
@@ -58,7 +57,6 @@ function TestCaseList() {
               <div key={testCase.id} className="table-row">
                 <div>{testCase.name}</div>
                 <div>{testCase.created_at}</div>
-                <div>{testCase.steps.length} 步</div>
               </div>
             ))}
           </div>
