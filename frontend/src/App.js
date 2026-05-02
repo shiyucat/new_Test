@@ -5,6 +5,7 @@ import CreateTestCase from './pages/CreateTestCase';
 import EditTestCase from './pages/EditTestCase';
 import TestPlanList from './pages/TestPlanList';
 import CreateTestPlan from './pages/CreateTestPlan';
+import EditTestPlan from './pages/EditTestPlan';
 import TestCaseSelector from './pages/TestCaseSelector';
 import './App.css';
 
@@ -37,12 +38,6 @@ function Navigation() {
               >
                 用例列表
               </Link>
-              <Link 
-                to="/create" 
-                className={`nav-link ${location.pathname === '/create' ? 'active' : ''}`}
-              >
-                新增测试用例
-              </Link>
             </div>
           </div>
         </div>
@@ -56,12 +51,6 @@ function Navigation() {
                 className={`nav-link ${location.pathname === '/testplan' ? 'active' : ''}`}
               >
                 测试计划列表
-              </Link>
-              <Link 
-                to="/testplan/create" 
-                className={`nav-link ${location.pathname === '/testplan/create' ? 'active' : ''}`}
-              >
-                创建测试计划
               </Link>
             </div>
           </div>
@@ -86,6 +75,7 @@ function App() {
                 <Route path="/edit/:id" element={<EditTestCase />} />
                 <Route path="/testplan" element={<TestPlanList />} />
                 <Route path="/testplan/create" element={<CreateTestPlan />} />
+                <Route path="/testplan/edit/:id" element={<EditTestPlan />} />
               </Routes>
             </main>
           </div>

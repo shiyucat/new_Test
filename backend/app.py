@@ -17,6 +17,7 @@ class TestCase(db.Model):
     preconditions = db.Column(db.Text, nullable=True)
     steps = db.Column(db.Text, nullable=False)
     expected_results = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -27,6 +28,7 @@ class TestCase(db.Model):
             'preconditions': self.preconditions,
             'steps': json.loads(self.steps) if self.steps else [],
             'expected_results': json.loads(self.expected_results) if self.expected_results else [],
+            'description': self.description,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -96,11 +98,16 @@ def create_testcase():
         if len(result) > 500:
             return jsonify({'error': f'第{i+1}步预期结果不能超过500字'}), 400
     
+    description = data.get('description', '')
+    if len(description) > 200:
+        return jsonify({'error': '描述不能超过200字'}), 400
+    
     testcase = TestCase(
         name=data['name'],
         preconditions=data.get('preconditions', ''),
         steps=json.dumps(steps),
-        expected_results=json.dumps(expected_results)
+        expected_results=json.dumps(expected_results),
+        description=description
     )
     
     db.session.add(testcase)
@@ -140,10 +147,15 @@ def update_testcase(id):
         if len(result) > 500:
             return jsonify({'error': f'第{i+1}步预期结果不能超过500字'}), 400
     
+    description = data.get('description', '')
+    if len(description) > 200:
+        return jsonify({'error': '描述不能超过200字'}), 400
+    
     testcase.name = data['name']
     testcase.preconditions = data.get('preconditions', '')
     testcase.steps = json.dumps(steps)
     testcase.expected_results = json.dumps(expected_results)
+    testcase.description = description
     
     db.session.commit()
     
@@ -192,6 +204,36 @@ def create_testplan():
 @app.route('/api/testplans/<int:id>', methods=['GET'])
 def get_testplan(id):
     testplan = TestPlan.query.get_or_404(id)
+    return jsonify(testplan.to_dict())
+
+
+@app.route('/api/testplans/<int:id>', methods=['PUT'])
+def update_testplan(id):
+    testplan = TestPlan.query.get_or_404(id)
+    data = request.get_json()
+    
+    if not data.get('name') or len(data.get('name', '').strip()) == 0:
+        return jsonify({'error': '测试计划名称不能为空'}), 400
+    
+    if len(data.get('name', '')) > 200:
+        return jsonify({'error': '测试计划名称不能超过200字'}), 400
+    
+    test_case_ids = data.get('test_case_ids', [])
+    
+    testplan.name = data['name'].strip()
+    
+    TestPlanTestCase.query.filter_by(test_plan_id=testplan.id).delete()
+    
+    for order, tc_id in enumerate(test_case_ids):
+        relation = TestPlanTestCase(
+            test_plan_id=testplan.id,
+            test_case_id=tc_id,
+            order=order
+        )
+        db.session.add(relation)
+    
+    db.session.commit()
+    
     return jsonify(testplan.to_dict())
 
 

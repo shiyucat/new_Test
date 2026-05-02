@@ -9,6 +9,7 @@ function EditTestCase() {
   const [preconditions, setPreconditions] = useState('');
   const [steps, setSteps] = useState(['']);
   const [expectedResults, setExpectedResults] = useState(['']);
+  const [description, setDescription] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -26,6 +27,7 @@ function EditTestCase() {
       setPreconditions(data.preconditions || '');
       setSteps(data.steps.length > 0 ? data.steps : ['']);
       setExpectedResults(data.expected_results.length > 0 ? data.expected_results : ['']);
+      setDescription(data.description || '');
       setMessage({ type: '', text: '' });
     } catch (err) {
       console.error('Error fetching test case:', err);
@@ -41,6 +43,10 @@ function EditTestCase() {
 
   const handlePreconditionsChange = (e) => {
     setPreconditions(e.target.value);
+  };
+
+  const handleDescriptionChange = (e) => {
+    setDescription(e.target.value);
   };
 
   const handleStepChange = (index, value) => {
@@ -84,6 +90,11 @@ function EditTestCase() {
       }
     }
     
+    if (description.length > 200) {
+      setMessage({ type: 'error', text: '描述不能超过200字' });
+      return;
+    }
+    
     setLoading(true);
     setMessage({ type: '', text: '' });
     
@@ -92,7 +103,8 @@ function EditTestCase() {
         name: name.trim(),
         preconditions: preconditions,
         steps: steps,
-        expected_results: expectedResults
+        expected_results: expectedResults,
+        description: description
       });
       
       if (response.status === 200) {
@@ -198,6 +210,20 @@ function EditTestCase() {
                 </div>
               </div>
             ))}
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">描述</label>
+            <textarea
+              className="form-textarea"
+              value={description}
+              onChange={handleDescriptionChange}
+              placeholder="请输入描述（200字以内）"
+              maxLength={200}
+            />
+            <div style={{ textAlign: 'right', fontSize: '0.85rem', color: '#7f8c8d', marginTop: '5px' }}>
+              {description.length}/200
+            </div>
           </div>
           
           <button

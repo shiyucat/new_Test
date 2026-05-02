@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 function TestPlanList() {
+  const navigate = useNavigate();
   const [testPlans, setTestPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,6 +52,8 @@ function TestPlanList() {
               <div>测试计划名称</div>
               <div>用例数量</div>
               <div>创建时间</div>
+              <div>更新时间</div>
+              <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
             </div>
           </div>
           <div className="table-body">
@@ -59,6 +62,17 @@ function TestPlanList() {
                 <div>{testPlan.name}</div>
                 <div>{testPlan.test_cases ? testPlan.test_cases.length : 0} 个用例</div>
                 <div>{testPlan.created_at}</div>
+                <div>{testPlan.updated_at}</div>
+                <div style={{ width: '80px', textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="edit-btn"
+                    onClick={() => navigate(`/testplan/edit/${testPlan.id}`)}
+                    title="编辑测试计划"
+                  >
+                    ⚙️
+                  </button>
+                </div>
               </div>
             ))}
           </div>

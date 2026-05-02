@@ -302,7 +302,22 @@ body {
 
 /* 测试计划行样式 */
 .test-plan-row-header {
-  grid-template-columns: 2fr 1fr 1fr !important;
+  grid-template-columns: 2fr 1fr 1fr 1fr 80px !important;
+}
+
+/* 编辑按钮样式 */
+.edit-btn {
+  background-color: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.edit-btn:hover {
+  background-color: #ecf0f1;
 }
 
 /* 选择用例按钮 */
