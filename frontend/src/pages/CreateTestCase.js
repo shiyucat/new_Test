@@ -9,6 +9,7 @@ function CreateTestCase() {
   const [steps, setSteps] = useState(['']);
   const [expectedResults, setExpectedResults] = useState(['']);
   const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState('P0');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +23,10 @@ function CreateTestCase() {
 
   const handleDescriptionChange = (e) => {
     setDescription(e.target.value);
+  };
+
+  const handlePriorityChange = (e) => {
+    setPriority(e.target.value);
   };
 
   const handleStepChange = (index, value) => {
@@ -79,7 +84,8 @@ function CreateTestCase() {
         preconditions: preconditions,
         steps: steps,
         expected_results: expectedResults,
-        description: description
+        description: description,
+        priority: priority
       });
       
       if (response.status === 201) {
@@ -123,6 +129,21 @@ function CreateTestCase() {
               maxLength={200}
               required
             />
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">用例等级</label>
+            <select
+              className="form-input"
+              value={priority}
+              onChange={handlePriorityChange}
+            >
+              <option value="P0">P0</option>
+              <option value="P1">P1</option>
+              <option value="P2">P2</option>
+              <option value="P3">P3</option>
+              <option value="P4">P4</option>
+            </select>
           </div>
           
           <div className="form-group">

@@ -27,6 +27,10 @@ function TestCaseList() {
   };
 
   const handleRowClick = (id) => {
+  };
+
+  const handleEditClick = (id, e) => {
+    e.stopPropagation();
     navigate(`/edit/${id}`);
   };
 
@@ -54,8 +58,10 @@ function TestCaseList() {
           <div className="table-header">
             <div className="table-row test-case-row-header">
               <div>用例名称</div>
+              <div>用例等级</div>
               <div>创建时间</div>
               <div>编辑时间</div>
+              <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
             </div>
           </div>
           <div className="table-body">
@@ -63,11 +69,25 @@ function TestCaseList() {
               <div 
                 key={testCase.id} 
                 className="table-row test-case-row"
-                onClick={() => handleRowClick(testCase.id)}
               >
-                <div className="test-case-name">{testCase.name}</div>
+                <div className="ellipsis-text" title={testCase.name}>{testCase.name}</div>
+                <div>
+                  <span className={`priority-badge priority-${testCase.priority || 'P0'}`}>
+                    {testCase.priority || 'P0'}
+                  </span>
+                </div>
                 <div>{testCase.created_at}</div>
                 <div>{testCase.updated_at}</div>
+                <div style={{ width: '80px', textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="edit-btn"
+                    onClick={(e) => handleEditClick(testCase.id, e)}
+                    title="编辑测试用例"
+                  >
+                    ⚙️
+                  </button>
+                </div>
               </div>
             ))}
           </div>
