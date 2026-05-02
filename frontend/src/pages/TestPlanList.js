@@ -7,16 +7,26 @@ function TestPlanList() {
   const [testPlans, setTestPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
     fetchTestPlans();
-  }, []);
+  }, [currentPage, pageSize]);
 
   const fetchTestPlans = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/testplans');
-      setTestPlans(response.data);
+      const params = {
+        page: currentPage,
+        page_size: pageSize
+      };
+      const response = await axios.get('/api/testplans', { params });
+      setTestPlans(response.data.testplans);
+      setTotal(response.data.total);
+      setTotalPages(response.data.total_pages);
       setError('');
     } catch (err) {
       console.error('Error fetching test plans:', err);
@@ -24,6 +34,17 @@ function TestPlanList() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const handlePageSizeChange = (e) => {
+    setPageSize(parseInt(e.target.value));
+    setCurrentPage(1);
   };
 
   return (
@@ -46,36 +67,77 @@ function TestPlanList() {
           </div>
         </div>
       ) : (
-        <div className="table-container">
-          <div className="table-header">
-            <div className="table-row test-plan-row-header">
-              <div>测试计划名称</div>
-              <div>用例数量</div>
-              <div>创建时间</div>
-              <div>更新时间</div>
-              <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
+        <div>
+          <div className="table-container">
+            <div className="table-header">
+              <div className="table-row test-plan-row-header">
+                <div>测试计划名称</div>
+                <div>用例数量</div>
+                <div>创建时间</div>
+                <div>更新时间</div>
+                <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
+              </div>
+            </div>
+            <div className="table-body">
+              {testPlans.map((testPlan) => (
+                <div key={testPlan.id} className="table-row test-plan-row">
+                  <div className="ellipsis-text" title={testPlan.name}>{testPlan.name}</div>
+                  <div>{testPlan.test_cases ? testPlan.test_cases.length : 0} 个用例</div>
+                  <div>{testPlan.created_at}</div>
+                  <div>{testPlan.updated_at}</div>
+                  <div style={{ width: '80px', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="edit-btn"
+                      onClick={() => navigate(`/testplan/edit/${testPlan.id}`)}
+                      title="编辑测试计划"
+                    >
+                      ⚙️
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="table-body">
-            {testPlans.map((testPlan) => (
-              <div key={testPlan.id} className="table-row test-plan-row">
-                <div className="ellipsis-text" title={testPlan.name}>{testPlan.name}</div>
-                <div>{testPlan.test_cases ? testPlan.test_cases.length : 0} 个用例</div>
-                <div>{testPlan.created_at}</div>
-                <div>{testPlan.updated_at}</div>
-                <div style={{ width: '80px', textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    className="edit-btn"
-                    onClick={() => navigate(`/testplan/edit/${testPlan.id}`)}
-                    title="编辑测试计划"
+          
+          {totalPages > 0 && (
+            <div className="pagination-container">
+              <div className="pagination-info">
+                共 {total} 条记录，第 {currentPage}/{totalPages || 1} 页
+              </div>
+              <div className="pagination-controls">
+                <select 
+                  className="page-size-select" 
+                  value={pageSize} 
+                  onChange={handlePageSizeChange}
+                >
+                  <option value={10}>10条/页</option>
+                  <option value={20}>20条/页</option>
+                  <option value={50}>50条/页</option>
+                  <option value={100}>100条/页</option>
+                </select>
+                <div className="pagination">
+                  <button 
+                    className="page-btn" 
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
                   >
-                    ⚙️
+                    上一页
+                  </button>
+                  <span className="page-info">
+                    第 {currentPage} 页
+                  </span>
+                  <button 
+                    className="page-btn" 
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                  >
+                    下一页
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
