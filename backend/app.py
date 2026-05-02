@@ -201,11 +201,29 @@ def delete_directory(id):
     return jsonify({'message': '删除成功'})
 
 
+def get_all_subdirectory_ids(directory_id):
+    """获取指定目录及其所有子目录的ID列表"""
+    if directory_id is None:
+        return None
+    
+    result = [directory_id]
+    
+    def get_children(parent_id):
+        children = TestCaseDirectory.query.filter_by(parent_id=parent_id).all()
+        for child in children:
+            result.append(child.id)
+            get_children(child.id)
+    
+    get_children(directory_id)
+    return result
+
+
 @app.route('/api/testcases', methods=['GET'])
 def get_testcases():
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 10, type=int)
     directory_id = request.args.get('directory_id', type=int)
+    include_subdirs = request.args.get('include_subdirs', 'true', type=str).lower() == 'true'
     
     valid_page_sizes = [10, 20, 50, 100]
     if page_size not in valid_page_sizes:
@@ -213,7 +231,11 @@ def get_testcases():
     
     query = TestCase.query
     if directory_id is not None:
-        query = query.filter_by(directory_id=directory_id)
+        if include_subdirs:
+            directory_ids = get_all_subdirectory_ids(directory_id)
+            query = query.filter(TestCase.directory_id.in_(directory_ids))
+        else:
+            query = query.filter_by(directory_id=directory_id)
     
     pagination = query.order_by(TestCase.created_at.desc()).paginate(
         page=page, per_page=page_size, error_out=False
