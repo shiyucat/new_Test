@@ -283,12 +283,13 @@ body {
 
 /* 测试用例行样式 */
 .test-case-row-header {
-  grid-template-columns: 2fr 1fr 1fr !important;
+  grid-template-columns: 200px 100px 1fr 1fr 80px !important;
 }
 
 .test-case-row {
-  grid-template-columns: 2fr 1fr 1fr !important;
-  cursor: pointer;
+  grid-template-columns: 200px 100px 1fr 1fr 80px !important;
+  cursor: default;
+  align-items: center;
 }
 
 .test-case-row:hover {
@@ -302,12 +303,55 @@ body {
 
 /* 测试计划行样式 */
 .test-plan-row-header {
-  grid-template-columns: 2fr 1fr 1fr 1fr 80px !important;
+  grid-template-columns: 200px 1fr 1fr 1fr 80px !important;
 }
 
 .test-plan-row {
-  grid-template-columns: 2fr 1fr 1fr 1fr 80px !important;
+  grid-template-columns: 200px 1fr 1fr 1fr 80px !important;
   align-items: center;
+}
+
+/* 省略号文本样式 */
+.ellipsis-text {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* 用例等级徽章样式 */
+.priority-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.priority-P0 {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.priority-P1 {
+  background-color: #f39c12;
+  color: white;
+}
+
+.priority-P2 {
+  background-color: #3498db;
+  color: white;
+}
+
+.priority-P3 {
+  background-color: #9b59b6;
+  color: white;
+}
+
+.priority-P4 {
+  background-color: #95a5a6;
+  color: white;
 }
 
 /* 编辑按钮样式 */

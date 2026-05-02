@@ -18,6 +18,7 @@ class TestCase(db.Model):
     steps = db.Column(db.Text, nullable=False)
     expected_results = db.Column(db.Text, nullable=False)
     description = db.Column(db.Text, nullable=True)
+    priority = db.Column(db.String(2), default='P0')
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -29,6 +30,7 @@ class TestCase(db.Model):
             'steps': json.loads(self.steps) if self.steps else [],
             'expected_results': json.loads(self.expected_results) if self.expected_results else [],
             'description': getattr(self, 'description', None),
+            'priority': self.priority,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -46,17 +48,25 @@ class TestPlan(db.Model):
         ).all()
         test_case_ids = [tc.test_case_id for tc in test_cases]
         test_cases_data = []
+        latest_updated_at = None
         for tc_id in test_case_ids:
             tc = TestCase.query.get(tc_id)
             if tc:
                 test_cases_data.append(tc.to_dict())
+                if latest_updated_at is None or tc.updated_at > latest_updated_at:
+                    latest_updated_at = tc.updated_at
+
+        if latest_updated_at is not None:
+            display_updated_at = latest_updated_at.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            display_updated_at = self.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
         return {
             'id': self.id,
             'name': self.name,
             'test_cases': test_cases_data,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            'updated_at': display_updated_at
         }
 
 
@@ -111,6 +121,12 @@ def create_testcase():
             return jsonify({'error': '描述不能超过200字'}), 400
         testcase_kwargs['description'] = description
     
+    if hasattr(TestCase, 'priority'):
+        priority = data.get('priority', 'P0')
+        if priority not in ['P0', 'P1', 'P2', 'P3', 'P4']:
+            priority = 'P0'
+        testcase_kwargs['priority'] = priority
+    
     testcase = TestCase(**testcase_kwargs)
     
     db.session.add(testcase)
@@ -160,6 +176,12 @@ def update_testcase(id):
         if len(description) > 200:
             return jsonify({'error': '描述不能超过200字'}), 400
         testcase.description = description
+    
+    if hasattr(testcase, 'priority'):
+        priority = data.get('priority', 'P0')
+        if priority not in ['P0', 'P1', 'P2', 'P3', 'P4']:
+            priority = 'P0'
+        testcase.priority = priority
     
     db.session.commit()
     

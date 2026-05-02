@@ -59,7 +59,7 @@ function TestPlanList() {
           <div className="table-body">
             {testPlans.map((testPlan) => (
               <div key={testPlan.id} className="table-row test-plan-row">
-                <div>{testPlan.name}</div>
+                <div className="ellipsis-text" title={testPlan.name}>{testPlan.name}</div>
                 <div>{testPlan.test_cases ? testPlan.test_cases.length : 0} 个用例</div>
                 <div>{testPlan.created_at}</div>
                 <div>{testPlan.updated_at}</div>
