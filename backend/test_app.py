@@ -55,25 +55,27 @@ class TestPlan(db.Model):
         ).all()
         test_case_ids = [tc.test_case_id for tc in test_cases]
         test_cases_data = []
-        latest_updated_at = None
+        latest_case_updated_at = None
         for tc_id in test_case_ids:
             tc = TestCase.query.get(tc_id)
             if tc:
                 test_cases_data.append(tc.to_dict())
-                if latest_updated_at is None or tc.updated_at > latest_updated_at:
-                    latest_updated_at = tc.updated_at
+                if latest_case_updated_at is None or tc.updated_at > latest_case_updated_at:
+                    latest_case_updated_at = tc.updated_at
 
-        if latest_updated_at is not None:
-            display_updated_at = latest_updated_at.strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            display_updated_at = self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        latest_updated_at = self.updated_at
+        if latest_case_updated_at is not None and latest_case_updated_at > latest_updated_at:
+            latest_updated_at = latest_case_updated_at
+
+        if latest_updated_at < self.created_at:
+            latest_updated_at = self.created_at
 
         return {
             'id': self.id,
             'name': self.name,
             'test_cases': test_cases_data,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': display_updated_at
+            'updated_at': latest_updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }
 
 
