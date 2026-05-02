@@ -13,6 +13,28 @@ db = SQLAlchemy(app)
 CORS(app)
 
 
+class TestCaseDirectory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('test_case_directory.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    parent = db.relationship('TestCaseDirectory', remote_side=[id], backref='children')
+
+    def to_dict(self, include_children=True):
+        result = {
+            'id': self.id,
+            'name': self.name,
+            'parent_id': self.parent_id,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        if include_children:
+            result['children'] = [child.to_dict(include_children=True) for child in self.children]
+        return result
+
+
 class TestCase(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
@@ -21,8 +43,11 @@ class TestCase(db.Model):
     expected_results = db.Column(db.Text, nullable=False)
     description = db.Column(db.Text, nullable=True)
     priority = db.Column(db.String(2), default='P0')
+    directory_id = db.Column(db.Integer, db.ForeignKey('test_case_directory.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    directory = db.relationship('TestCaseDirectory', backref='test_cases')
 
     def to_dict(self):
         try:
@@ -38,6 +63,8 @@ class TestCase(db.Model):
             'expected_results': json.loads(self.expected_results) if self.expected_results else [],
             'description': getattr(self, 'description', None),
             'priority': priority,
+            'directory_id': self.directory_id,
+            'directory_name': self.directory.name if self.directory else None,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -87,10 +114,118 @@ class TestPlanTestCase(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 
+@app.route('/api/directories', methods=['GET'])
+def get_directories():
+    directories = TestCaseDirectory.query.filter_by(parent_id=None).all()
+    return jsonify([d.to_dict(include_children=True) for d in directories])
+
+
+@app.route('/api/directories/all', methods=['GET'])
+def get_all_directories():
+    directories = TestCaseDirectory.query.order_by(TestCaseDirectory.created_at.asc()).all()
+    return jsonify([{
+        'id': d.id,
+        'name': d.name,
+        'parent_id': d.parent_id
+    } for d in directories])
+
+
+@app.route('/api/directories', methods=['POST'])
+def create_directory():
+    data = request.get_json()
+    
+    if not data.get('name') or len(data.get('name', '').strip()) == 0:
+        return jsonify({'error': '目录名称不能为空'}), 400
+    
+    if len(data.get('name', '')) > 100:
+        return jsonify({'error': '目录名称不能超过100字'}), 400
+    
+    parent_id = data.get('parent_id')
+    if parent_id is not None:
+        parent = TestCaseDirectory.query.get(parent_id)
+        if not parent:
+            return jsonify({'error': '父目录不存在'}), 400
+    
+    directory = TestCaseDirectory(
+        name=data['name'].strip(),
+        parent_id=parent_id
+    )
+    db.session.add(directory)
+    db.session.commit()
+    
+    return jsonify(directory.to_dict(include_children=False)), 201
+
+
+@app.route('/api/directories/<int:id>', methods=['PUT'])
+def update_directory(id):
+    directory = TestCaseDirectory.query.get_or_404(id)
+    data = request.get_json()
+    
+    if not data.get('name') or len(data.get('name', '').strip()) == 0:
+        return jsonify({'error': '目录名称不能为空'}), 400
+    
+    if len(data.get('name', '')) > 100:
+        return jsonify({'error': '目录名称不能超过100字'}), 400
+    
+    parent_id = data.get('parent_id')
+    if parent_id is not None:
+        if parent_id == id:
+            return jsonify({'error': '不能将目录设置为自己的子目录'}), 400
+        parent = TestCaseDirectory.query.get(parent_id)
+        if not parent:
+            return jsonify({'error': '父目录不存在'}), 400
+    
+    directory.name = data['name'].strip()
+    if 'parent_id' in data:
+        directory.parent_id = parent_id
+    
+    db.session.commit()
+    
+    return jsonify(directory.to_dict(include_children=False))
+
+
+@app.route('/api/directories/<int:id>', methods=['DELETE'])
+def delete_directory(id):
+    directory = TestCaseDirectory.query.get_or_404(id)
+    
+    test_cases = TestCase.query.filter_by(directory_id=id).all()
+    if test_cases:
+        return jsonify({'error': '目录下存在测试用例，无法删除'}), 400
+    
+    if directory.children:
+        return jsonify({'error': '目录下存在子目录，无法删除'}), 400
+    
+    db.session.delete(directory)
+    db.session.commit()
+    
+    return jsonify({'message': '删除成功'})
+
+
 @app.route('/api/testcases', methods=['GET'])
 def get_testcases():
-    testcases = TestCase.query.order_by(TestCase.created_at.desc()).all()
-    return jsonify([tc.to_dict() for tc in testcases])
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+    directory_id = request.args.get('directory_id', type=int)
+    
+    valid_page_sizes = [10, 20, 50, 100]
+    if page_size not in valid_page_sizes:
+        page_size = 10
+    
+    query = TestCase.query
+    if directory_id is not None:
+        query = query.filter_by(directory_id=directory_id)
+    
+    pagination = query.order_by(TestCase.created_at.desc()).paginate(
+        page=page, per_page=page_size, error_out=False
+    )
+    
+    return jsonify({
+        'testcases': [tc.to_dict() for tc in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': pagination.pages
+    })
 
 
 @app.route('/api/testcases', methods=['POST'])
@@ -102,6 +237,15 @@ def create_testcase():
     
     if len(data.get('name', '')) > 200:
         return jsonify({'error': '用例名称不能超过200字'}), 400
+    
+    directory_id = data.get('directory_id')
+    if directory_id is None:
+        return jsonify({'error': '请选择目录'}), 400
+    
+    if directory_id is not None:
+        directory = TestCaseDirectory.query.get(directory_id)
+        if not directory:
+            return jsonify({'error': '目录不存在'}), 400
     
     steps = data.get('steps', [])
     expected_results = data.get('expected_results', [])
@@ -121,7 +265,8 @@ def create_testcase():
         'name': data['name'],
         'preconditions': data.get('preconditions', ''),
         'steps': json.dumps(steps),
-        'expected_results': json.dumps(expected_results)
+        'expected_results': json.dumps(expected_results),
+        'directory_id': directory_id
     }
     
     # 处理 description 字段
@@ -173,6 +318,15 @@ def update_testcase(id):
     if len(data.get('name', '')) > 200:
         return jsonify({'error': '用例名称不能超过200字'}), 400
     
+    directory_id = data.get('directory_id')
+    if directory_id is None:
+        return jsonify({'error': '请选择目录'}), 400
+    
+    if directory_id is not None:
+        directory = TestCaseDirectory.query.get(directory_id)
+        if not directory:
+            return jsonify({'error': '目录不存在'}), 400
+    
     steps = data.get('steps', [])
     expected_results = data.get('expected_results', [])
     
@@ -191,6 +345,7 @@ def update_testcase(id):
     testcase.preconditions = data.get('preconditions', '')
     testcase.steps = json.dumps(steps)
     testcase.expected_results = json.dumps(expected_results)
+    testcase.directory_id = directory_id
     
     # 处理 description 字段
     try:
@@ -219,8 +374,24 @@ def update_testcase(id):
 
 @app.route('/api/testplans', methods=['GET'])
 def get_testplans():
-    testplans = TestPlan.query.order_by(TestPlan.created_at.desc()).all()
-    return jsonify([tp.to_dict() for tp in testplans])
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+    
+    valid_page_sizes = [10, 20, 50, 100]
+    if page_size not in valid_page_sizes:
+        page_size = 10
+    
+    pagination = TestPlan.query.order_by(TestPlan.created_at.desc()).paginate(
+        page=page, per_page=page_size, error_out=False
+    )
+    
+    return jsonify({
+        'testplans': [tp.to_dict() for tp in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': pagination.pages
+    })
 
 
 @app.route('/api/testplans', methods=['POST'])

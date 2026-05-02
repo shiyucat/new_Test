@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -11,13 +11,54 @@ function EditTestCase() {
   const [expectedResults, setExpectedResults] = useState(['']);
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('P0');
+  const [directoryId, setDirectoryId] = useState(null);
+  const [directoryName, setDirectoryName] = useState('');
+  const [showDirectorySelector, setShowDirectorySelector] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const iframeRef = useRef(null);
 
   useEffect(() => {
     fetchTestCase();
   }, [id]);
+
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'SELECT_DIRECTORY') {
+        const directory = event.data.directory;
+        if (directory) {
+          setDirectoryId(directory.id);
+          setDirectoryName(directory.name);
+        }
+        setShowDirectorySelector(false);
+      } else if (event.data && event.data.type === 'CANCEL_DIRECTORY') {
+        setShowDirectorySelector(false);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const openDirectorySelector = () => {
+    setShowDirectorySelector(true);
+  };
+
+  useEffect(() => {
+    if (showDirectorySelector && iframeRef.current) {
+      const timer = setTimeout(() => {
+        if (iframeRef.current && iframeRef.current.contentWindow) {
+          const initData = {
+            type: 'INIT_DIRECTORY',
+            selectedDirectory: directoryId ? { id: directoryId, name: directoryName } : null
+          };
+          iframeRef.current.contentWindow.postMessage(initData, '*');
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showDirectorySelector, directoryId, directoryName]);
 
   const fetchTestCase = async () => {
     try {
@@ -30,6 +71,8 @@ function EditTestCase() {
       setExpectedResults(data.expected_results.length > 0 ? data.expected_results : ['']);
       setDescription(data.description || '');
       setPriority(data.priority || 'P0');
+      setDirectoryId(data.directory_id);
+      setDirectoryName(data.directory_name || '');
       setMessage({ type: '', text: '' });
     } catch (err) {
       console.error('Error fetching test case:', err);
@@ -85,6 +128,11 @@ function EditTestCase() {
       return;
     }
     
+    if (!directoryId) {
+      setMessage({ type: 'error', text: '请选择目录' });
+      return;
+    }
+    
     for (let i = 0; i < steps.length; i++) {
       if (steps[i].length > 500) {
         setMessage({ type: 'error', text: `第${i+1}步测试步骤不能超过500字` });
@@ -111,7 +159,8 @@ function EditTestCase() {
         steps: steps,
         expected_results: expectedResults,
         description: description,
-        priority: priority
+        priority: priority,
+        directory_id: directoryId
       });
       
       if (response.status === 200) {
@@ -164,6 +213,30 @@ function EditTestCase() {
               maxLength={200}
               required
             />
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">所属目录 <span style={{ color: 'red' }}>*</span></label>
+            {directoryId ? (
+              <div className="directory-display">
+                <span className="directory-name">📁 {directoryName}</span>
+                <button
+                  type="button"
+                  className="change-btn"
+                  onClick={openDirectorySelector}
+                >
+                  更换
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="select-directory-btn"
+                onClick={openDirectorySelector}
+              >
+                选择目录
+              </button>
+            )}
           </div>
           
           <div className="form-group">
@@ -257,6 +330,19 @@ function EditTestCase() {
           </button>
         </form>
       </div>
+
+      {showDirectorySelector && (
+        <div className="selector-modal">
+          <div className="selector-modal-content">
+            <iframe
+              ref={iframeRef}
+              src="/directory-selector"
+              className="selector-iframe"
+              title="DirectorySelector"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

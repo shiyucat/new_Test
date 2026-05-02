@@ -7,6 +7,7 @@ import TestPlanList from './pages/TestPlanList';
 import CreateTestPlan from './pages/CreateTestPlan';
 import EditTestPlan from './pages/EditTestPlan';
 import TestCaseSelector from './pages/TestCaseSelector';
+import DirectorySelector from './pages/DirectorySelector';
 import './App.css';
 
 function Navigation() {
@@ -65,6 +66,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/selector" element={<TestCaseSelector />} />
+        <Route path="/directory-selector" element={<DirectorySelector />} />
         <Route path="*" element={
           <div className="app-container">
             <Navigation />
