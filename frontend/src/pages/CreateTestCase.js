@@ -8,6 +8,7 @@ function CreateTestCase() {
   const [preconditions, setPreconditions] = useState('');
   const [steps, setSteps] = useState(['']);
   const [expectedResults, setExpectedResults] = useState(['']);
+  const [description, setDescription] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
 
@@ -17,6 +18,10 @@ function CreateTestCase() {
 
   const handlePreconditionsChange = (e) => {
     setPreconditions(e.target.value);
+  };
+
+  const handleDescriptionChange = (e) => {
+    setDescription(e.target.value);
   };
 
   const handleStepChange = (index, value) => {
@@ -60,6 +65,11 @@ function CreateTestCase() {
       }
     }
     
+    if (description.length > 200) {
+      setMessage({ type: 'error', text: '描述不能超过200字' });
+      return;
+    }
+    
     setLoading(true);
     setMessage({ type: '', text: '' });
     
@@ -68,7 +78,8 @@ function CreateTestCase() {
         name: name.trim(),
         preconditions: preconditions,
         steps: steps,
-        expected_results: expectedResults
+        expected_results: expectedResults,
+        description: description
       });
       
       if (response.status === 201) {
@@ -165,6 +176,20 @@ function CreateTestCase() {
                 </div>
               </div>
             ))}
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">描述</label>
+            <textarea
+              className="form-textarea"
+              value={description}
+              onChange={handleDescriptionChange}
+              placeholder="请输入描述（200字以内）"
+              maxLength={200}
+            />
+            <div style={{ textAlign: 'right', fontSize: '0.85rem', color: '#7f8c8d', marginTop: '5px' }}>
+              {description.length}/200
+            </div>
           </div>
           
           <button
