@@ -1,0 +1,216 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useNavigate, useParams } from 'react-router-dom';
+
+function EditTestCase() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const [name, setName] = useState('');
+  const [preconditions, setPreconditions] = useState('');
+  const [steps, setSteps] = useState(['']);
+  const [expectedResults, setExpectedResults] = useState(['']);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+
+  useEffect(() => {
+    fetchTestCase();
+  }, [id]);
+
+  const fetchTestCase = async () => {
+    try {
+      setFetching(true);
+      const response = await axios.get(`/api/testcases/${id}`);
+      const data = response.data;
+      setName(data.name);
+      setPreconditions(data.preconditions || '');
+      setSteps(data.steps.length > 0 ? data.steps : ['']);
+      setExpectedResults(data.expected_results.length > 0 ? data.expected_results : ['']);
+      setMessage({ type: '', text: '' });
+    } catch (err) {
+      console.error('Error fetching test case:', err);
+      setMessage({ type: 'error', text: '获取用例详情失败，请稍后重试' });
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const handleNameChange = (e) => {
+    setName(e.target.value);
+  };
+
+  const handlePreconditionsChange = (e) => {
+    setPreconditions(e.target.value);
+  };
+
+  const handleStepChange = (index, value) => {
+    const newSteps = [...steps];
+    newSteps[index] = value;
+    setSteps(newSteps);
+  };
+
+  const handleExpectedResultChange = (index, value) => {
+    const newExpectedResults = [...expectedResults];
+    newExpectedResults[index] = value;
+    setExpectedResults(newExpectedResults);
+  };
+
+  const addStep = () => {
+    setSteps([...steps, '']);
+    setExpectedResults([...expectedResults, '']);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!name || name.trim() === '') {
+      setMessage({ type: 'error', text: '用例名称不能为空' });
+      return;
+    }
+    
+    if (name.length > 200) {
+      setMessage({ type: 'error', text: '用例名称不能超过200字' });
+      return;
+    }
+    
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].length > 500) {
+        setMessage({ type: 'error', text: `第${i+1}步测试步骤不能超过500字` });
+        return;
+      }
+      if (expectedResults[i].length > 500) {
+        setMessage({ type: 'error', text: `第${i+1}步预期结果不能超过500字` });
+        return;
+      }
+    }
+    
+    setLoading(true);
+    setMessage({ type: '', text: '' });
+    
+    try {
+      const response = await axios.put(`/api/testcases/${id}`, {
+        name: name.trim(),
+        preconditions: preconditions,
+        steps: steps,
+        expected_results: expectedResults
+      });
+      
+      if (response.status === 200) {
+        setMessage({ type: 'success', text: '用例更新成功！' });
+        setTimeout(() => {
+          navigate('/');
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Error updating test case:', error);
+      if (error.response && error.response.data && error.response.data.error) {
+        setMessage({ type: 'error', text: error.response.data.error });
+      } else {
+        setMessage({ type: 'error', text: '更新失败，请稍后重试' });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (fetching) {
+    return (
+      <div>
+        <h1 className="page-title">编辑测试用例</h1>
+        <div className="loading">加载中...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1 className="page-title">编辑测试用例</h1>
+      
+      {message.text && (
+        <div className={message.type === 'success' ? 'success-message' : 'error-message'}>
+          {message.text}
+        </div>
+      )}
+      
+      <div className="form-container">
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">用例名称 <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              className="form-input"
+              value={name}
+              onChange={handleNameChange}
+              placeholder="请输入用例名称（200字以内）"
+              maxLength={200}
+              required
+            />
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">前提条件</label>
+            <textarea
+              className="form-textarea"
+              value={preconditions}
+              onChange={handlePreconditionsChange}
+              placeholder="请输入前提条件"
+            />
+          </div>
+          
+          <div className="form-group">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>测试步骤与预期结果</label>
+              <button
+                type="button"
+                className="add-step-btn"
+                onClick={addStep}
+              >
+                + 新增步骤
+              </button>
+            </div>
+            
+            {steps.map((step, index) => (
+              <div key={index} className="step-container">
+                <div className="step-header">
+                  <span className="step-number">步骤 {index + 1}</span>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '15px' }}>
+                  <label className="form-label">测试步骤</label>
+                  <textarea
+                    className="form-textarea"
+                    value={step}
+                    onChange={(e) => handleStepChange(index, e.target.value)}
+                    placeholder="请输入测试步骤（500字以内）"
+                    maxLength={500}
+                  />
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">预期结果</label>
+                  <textarea
+                    className="form-textarea"
+                    value={expectedResults[index]}
+                    onChange={(e) => handleExpectedResultChange(index, e.target.value)}
+                    placeholder="请输入预期结果（500字以内）"
+                    maxLength={500}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <button
+            type="submit"
+            className="submit-btn"
+            disabled={loading}
+          >
+            {loading ? '保存中...' : '保存修改'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default EditTestCase;
