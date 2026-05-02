@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 function TestCaseList() {
   const [testCases, setTestCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchTestCases();
@@ -23,6 +24,10 @@ function TestCaseList() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRowClick = (id) => {
+    navigate(`/edit/${id}`);
   };
 
   return (
@@ -47,16 +52,22 @@ function TestCaseList() {
       ) : (
         <div className="table-container">
           <div className="table-header">
-            <div className="table-row">
+            <div className="table-row test-case-row-header">
               <div>用例名称</div>
               <div>创建时间</div>
+              <div>编辑时间</div>
             </div>
           </div>
           <div className="table-body">
             {testCases.map((testCase) => (
-              <div key={testCase.id} className="table-row">
-                <div>{testCase.name}</div>
+              <div 
+                key={testCase.id} 
+                className="table-row test-case-row"
+                onClick={() => handleRowClick(testCase.id)}
+              >
+                <div className="test-case-name">{testCase.name}</div>
                 <div>{testCase.created_at}</div>
+                <div>{testCase.updated_at}</div>
               </div>
             ))}
           </div>
