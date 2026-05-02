@@ -53,6 +53,15 @@ function CreateTestPlan() {
     }
   }, [showSelector, selectedTestCases]);
 
+  useEffect(() => {
+    const newTotalPages = Math.ceil(selectedTestCases.length / pageSize);
+    if (currentPage > newTotalPages && newTotalPages > 0) {
+      setCurrentPage(newTotalPages);
+    } else if (newTotalPages === 0) {
+      setCurrentPage(1);
+    }
+  }, [selectedTestCases, currentPage, pageSize]);
+
   const handleNameChange = (e) => {
     setName(e.target.value);
   };
