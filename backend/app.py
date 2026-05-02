@@ -28,7 +28,7 @@ class TestCase(db.Model):
             'preconditions': self.preconditions,
             'steps': json.loads(self.steps) if self.steps else [],
             'expected_results': json.loads(self.expected_results) if self.expected_results else [],
-            'description': self.description,
+            'description': getattr(self, 'description', None),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }
@@ -98,17 +98,20 @@ def create_testcase():
         if len(result) > 500:
             return jsonify({'error': f'第{i+1}步预期结果不能超过500字'}), 400
     
-    description = data.get('description', '')
-    if len(description) > 200:
-        return jsonify({'error': '描述不能超过200字'}), 400
+    testcase_kwargs = {
+        'name': data['name'],
+        'preconditions': data.get('preconditions', ''),
+        'steps': json.dumps(steps),
+        'expected_results': json.dumps(expected_results)
+    }
     
-    testcase = TestCase(
-        name=data['name'],
-        preconditions=data.get('preconditions', ''),
-        steps=json.dumps(steps),
-        expected_results=json.dumps(expected_results),
-        description=description
-    )
+    if hasattr(TestCase, 'description'):
+        description = data.get('description', '')
+        if len(description) > 200:
+            return jsonify({'error': '描述不能超过200字'}), 400
+        testcase_kwargs['description'] = description
+    
+    testcase = TestCase(**testcase_kwargs)
     
     db.session.add(testcase)
     db.session.commit()
@@ -147,15 +150,16 @@ def update_testcase(id):
         if len(result) > 500:
             return jsonify({'error': f'第{i+1}步预期结果不能超过500字'}), 400
     
-    description = data.get('description', '')
-    if len(description) > 200:
-        return jsonify({'error': '描述不能超过200字'}), 400
-    
     testcase.name = data['name']
     testcase.preconditions = data.get('preconditions', '')
     testcase.steps = json.dumps(steps)
     testcase.expected_results = json.dumps(expected_results)
-    testcase.description = description
+    
+    if hasattr(testcase, 'description'):
+        description = data.get('description', '')
+        if len(description) > 200:
+            return jsonify({'error': '描述不能超过200字'}), 400
+        testcase.description = description
     
     db.session.commit()
     
