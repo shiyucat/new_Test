@@ -85,7 +85,8 @@ function CreateTestCase() {
   const isEmptyValue = (value) => {
     if (!value) return true;
     const trimmed = value.replace(/[\s\t\n\r]+/g, '');
-    return trimmed === '' || /^[\W_]*$/.test(trimmed);
+    if (trimmed === '') return true;
+    return /^[^\p{L}\p{N}]*$/u.test(trimmed);
   };
 
   const isStepEmpty = (index) => {
