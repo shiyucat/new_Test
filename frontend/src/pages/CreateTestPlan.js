@@ -277,7 +277,7 @@ function CreateTestPlan() {
           <div className="selector-modal-content">
             <iframe
               ref={iframeRef}
-              src="/#/selector"
+              src="/selector"
               className="selector-iframe"
               title="TestCaseSelector"
             />

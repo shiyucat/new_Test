@@ -74,19 +74,23 @@ function Navigation() {
 function App() {
   return (
     <Router>
-      <div className="app-container">
-        <Navigation />
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<TestCaseList />} />
-            <Route path="/create" element={<CreateTestCase />} />
-            <Route path="/edit/:id" element={<EditTestCase />} />
-            <Route path="/testplan" element={<TestPlanList />} />
-            <Route path="/testplan/create" element={<CreateTestPlan />} />
-            <Route path="/selector" element={<TestCaseSelector />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        <Route path="/selector" element={<TestCaseSelector />} />
+        <Route path="*" element={
+          <div className="app-container">
+            <Navigation />
+            <main className="main-content">
+              <Routes>
+                <Route path="/" element={<TestCaseList />} />
+                <Route path="/create" element={<CreateTestCase />} />
+                <Route path="/edit/:id" element={<EditTestCase />} />
+                <Route path="/testplan" element={<TestPlanList />} />
+                <Route path="/testplan/create" element={<CreateTestPlan />} />
+              </Routes>
+            </main>
+          </div>
+        } />
+      </Routes>
     </Router>
   );
 }
