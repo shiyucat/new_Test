@@ -16,6 +16,7 @@ function TestCaseList() {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [directorySearchTerm, setDirectorySearchTerm] = useState('');
   const navigate = useNavigate();
   const iframeRef = useRef(null);
 
@@ -152,8 +153,25 @@ function TestCaseList() {
     navigate(`/edit/${id}`);
   };
 
+  const matchesSearch = (directory, term) => {
+    if (!term || term.trim() === '') return true;
+    const lowerTerm = term.toLowerCase();
+    if (directory.name.toLowerCase().includes(lowerTerm)) return true;
+    if (directory.children) {
+      for (const child of directory.children) {
+        if (matchesSearch(child, term)) return true;
+      }
+    }
+    return false;
+  };
+
   const renderDirectoryItem = (directory, level = 0) => {
+    if (!matchesSearch(directory, directorySearchTerm)) {
+      return null;
+    }
+    
     const hasChildren = directory.children && directory.children.length > 0;
+    const hasVisibleChildren = hasChildren && directory.children.some(child => matchesSearch(child, directorySearchTerm));
     const isExpanded = expandedIds.has(directory.id);
     const isSelected = selectedDirectoryId === directory.id;
 
@@ -164,7 +182,7 @@ function TestCaseList() {
           onClick={() => handleSelectDirectory(directory.id)}
           style={{ paddingLeft: `${15 + level * 15}px` }}
         >
-          {hasChildren ? (
+          {hasVisibleChildren ? (
             <span 
               className="node-toggle" 
               onClick={(e) => toggleExpand(directory.id, e)}
@@ -195,7 +213,7 @@ function TestCaseList() {
             </button>
           </div>
         </div>
-        {hasChildren && isExpanded && (
+        {hasVisibleChildren && isExpanded && (
           <div className="directory-tree-children">
             {directory.children.map(child => renderDirectoryItem(child, level + 1))}
           </div>
@@ -218,16 +236,14 @@ function TestCaseList() {
   return (
     <div className="testcase-page-container">
       <div className="directory-sidebar">
-        <div className="directory-sidebar-header">
-          <h3>测试用例</h3>
-          <button
-            type="button"
-            className="add-root-btn"
-            onClick={handleAddRootDirectory}
-            title="新建根目录"
-          >
-            +
-          </button>
+        <div className="directory-search-container">
+          <input
+            type="text"
+            className="directory-search-input"
+            placeholder="搜索目录..."
+            value={directorySearchTerm}
+            onChange={(e) => setDirectorySearchTerm(e.target.value)}
+          />
         </div>
         <div className="directory-list-container">
           <div 
@@ -236,14 +252,23 @@ function TestCaseList() {
           >
             <span className="node-icon">📋</span>
             <span className="node-name">全部用例</span>
+            <button
+              type="button"
+              className="node-action-btn add-root-inline"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddRootDirectory();
+              }}
+              title="新建根目录"
+            >
+              +
+            </button>
           </div>
           {directories.map(directory => renderDirectoryItem(directory))}
         </div>
       </div>
 
       <div className="testcase-main-content">
-        <h1 className="page-title">用例管理</h1>
-        
         <Link to="/create" className="create-btn">
           + 新增测试用例
         </Link>

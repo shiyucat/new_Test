@@ -110,9 +110,73 @@ function EditTestCase() {
     setExpectedResults(newExpectedResults);
   };
 
+  const isEmptyValue = (value) => {
+    if (!value) return true;
+    const trimmed = value.replace(/[\s\t\n\r]+/g, '');
+    return trimmed === '' || /^[\W_]*$/.test(trimmed);
+  };
+
+  const isStepEmpty = (index) => {
+    return isEmptyValue(steps[index]) && isEmptyValue(expectedResults[index]);
+  };
+
+  const canAddStep = () => {
+    const emptyStepCount = steps.reduce((count, _, index) => {
+      return count + (isStepEmpty(index) ? 1 : 0);
+    }, 0);
+    return emptyStepCount < 1;
+  };
+
   const addStep = () => {
+    if (!canAddStep()) {
+      return;
+    }
     setSteps([...steps, '']);
     setExpectedResults([...expectedResults, '']);
+  };
+
+  const removeStep = (index) => {
+    if (steps.length <= 1) {
+      return;
+    }
+    const newSteps = steps.filter((_, i) => i !== index);
+    const newExpectedResults = expectedResults.filter((_, i) => i !== index);
+    setSteps(newSteps);
+    setExpectedResults(newExpectedResults);
+  };
+
+  const validateSteps = () => {
+    for (let i = 0; i < steps.length; i++) {
+      const stepEmpty = isEmptyValue(steps[i]);
+      const resultEmpty = isEmptyValue(expectedResults[i]);
+      
+      if (!stepEmpty && resultEmpty) {
+        return { valid: false, message: `第${i + 1}步：测试步骤不为空时，预期结果为必填` };
+      }
+      if (!resultEmpty && stepEmpty) {
+        return { valid: false, message: `第${i + 1}步：预期结果不为空时，测试步骤为必填` };
+      }
+    }
+    return { valid: true };
+  };
+
+  const getFilteredSteps = () => {
+    const filteredSteps = [];
+    const filteredExpectedResults = [];
+    
+    for (let i = 0; i < steps.length; i++) {
+      if (!isStepEmpty(i)) {
+        filteredSteps.push(steps[i]);
+        filteredExpectedResults.push(expectedResults[i]);
+      }
+    }
+    
+    if (filteredSteps.length === 0) {
+      filteredSteps.push('');
+      filteredExpectedResults.push('');
+    }
+    
+    return { steps: filteredSteps, expectedResults: filteredExpectedResults };
   };
 
   const handleSubmit = async (e) => {
@@ -133,12 +197,20 @@ function EditTestCase() {
       return;
     }
     
-    for (let i = 0; i < steps.length; i++) {
-      if (steps[i].length > 500) {
+    const validation = validateSteps();
+    if (!validation.valid) {
+      setMessage({ type: 'error', text: validation.message });
+      return;
+    }
+    
+    const { steps: filteredSteps, expectedResults: filteredExpectedResults } = getFilteredSteps();
+    
+    for (let i = 0; i < filteredSteps.length; i++) {
+      if (filteredSteps[i].length > 500) {
         setMessage({ type: 'error', text: `第${i+1}步测试步骤不能超过500字` });
         return;
       }
-      if (expectedResults[i].length > 500) {
+      if (filteredExpectedResults[i].length > 500) {
         setMessage({ type: 'error', text: `第${i+1}步预期结果不能超过500字` });
         return;
       }
@@ -156,8 +228,8 @@ function EditTestCase() {
       const response = await axios.put(`/api/testcases/${id}`, {
         name: name.trim(),
         preconditions: preconditions,
-        steps: steps,
-        expected_results: expectedResults,
+        steps: filteredSteps,
+        expected_results: filteredExpectedResults,
         description: description,
         priority: priority,
         directory_id: directoryId
@@ -265,46 +337,60 @@ function EditTestCase() {
           </div>
           
           <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <label className="form-label" style={{ marginBottom: 0 }}>测试步骤与预期结果</label>
-              <button
-                type="button"
-                className="add-step-btn"
-                onClick={addStep}
-              >
-                + 新增步骤
-              </button>
-            </div>
+            <label className="form-label">测试步骤与预期结果</label>
             
-            {steps.map((step, index) => (
-              <div key={index} className="step-container">
-                <div className="step-header">
-                  <span className="step-number">步骤 {index + 1}</span>
-                </div>
-                
-                <div className="form-group" style={{ marginBottom: '15px' }}>
-                  <label className="form-label">测试步骤</label>
-                  <textarea
-                    className="form-textarea"
-                    value={step}
-                    onChange={(e) => handleStepChange(index, e.target.value)}
-                    placeholder="请输入测试步骤（500字以内）"
-                    maxLength={500}
-                  />
-                </div>
-                
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">预期结果</label>
-                  <textarea
-                    className="form-textarea"
-                    value={expectedResults[index]}
-                    onChange={(e) => handleExpectedResultChange(index, e.target.value)}
-                    placeholder="请输入预期结果（500字以内）"
-                    maxLength={500}
-                  />
-                </div>
+            <div className="steps-table-container">
+              <div className="steps-table-header">
+                <div className="step-col-index">序号</div>
+                <div className="step-col-action">测试步骤</div>
+                <div className="step-col-action">预期结果</div>
+                <div className="step-col-buttons">操作</div>
               </div>
-            ))}
+              
+              {steps.map((step, index) => (
+                <div key={index} className="steps-table-row">
+                  <div className="step-col-index">{index + 1}</div>
+                  <div className="step-col-action">
+                    <textarea
+                      className="step-textarea"
+                      value={step}
+                      onChange={(e) => handleStepChange(index, e.target.value)}
+                      placeholder="请输入测试步骤"
+                      maxLength={500}
+                    />
+                  </div>
+                  <div className="step-col-action">
+                    <textarea
+                      className="step-textarea"
+                      value={expectedResults[index]}
+                      onChange={(e) => handleExpectedResultChange(index, e.target.value)}
+                      placeholder="请输入预期结果"
+                      maxLength={500}
+                    />
+                  </div>
+                  <div className="step-col-buttons">
+                    <button
+                      type="button"
+                      className="step-btn add-step-inline"
+                      onClick={() => addStep()}
+                      disabled={!canAddStep()}
+                      title="新增步骤"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="step-btn remove-step-inline"
+                      onClick={() => removeStep(index)}
+                      disabled={steps.length <= 1}
+                      title="删除步骤"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           
           <div className="form-group">
