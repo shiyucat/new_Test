@@ -122,11 +122,9 @@ def create_testcase():
         'expected_results': json.dumps(expected_results)
     }
     
-    # 处理 description 字段
     try:
         testcase_test = TestCase(**testcase_kwargs)
         _ = testcase_test.description
-        # 如果可以访问 description 字段
         description = data.get('description', '')
         if len(description) > 200:
             return jsonify({'error': '描述不能超过200字'}), 400
@@ -134,11 +132,9 @@ def create_testcase():
     except AttributeError:
         pass
     
-    # 处理 priority 字段
     try:
         testcase_test = TestCase(**testcase_kwargs)
         _ = testcase_test.priority
-        # 如果可以访问 priority 字段
         priority = data.get('priority', 'P0')
         if priority not in ['P0', 'P1', 'P2', 'P3', 'P4']:
             priority = 'P0'
@@ -190,7 +186,6 @@ def update_testcase(id):
     testcase.steps = json.dumps(steps)
     testcase.expected_results = json.dumps(expected_results)
     
-    # 处理 description 字段
     try:
         _ = testcase.description
         description = data.get('description', '')
@@ -200,7 +195,6 @@ def update_testcase(id):
     except AttributeError:
         pass
     
-    # 处理 priority 字段
     try:
         _ = testcase.priority
         priority = data.get('priority', 'P0')
@@ -293,4 +287,4 @@ def update_testplan(id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True, port=6000)
+    app.run(debug=True, port=6001)
