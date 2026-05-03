@@ -552,8 +552,57 @@ function TestCaseList() {
     setDragOverAllCases(false);
   };
 
-  const getTestCasesByDirectory = (directoryId) => {
-    return allTestCases.filter(tc => tc.directory_id === directoryId);
+  const getAllSubdirectoryIds = (directory, directoriesMap) => {
+    const ids = [directory.id];
+    if (directory.children && directory.children.length > 0) {
+      for (const child of directory.children) {
+        ids.push(...getAllSubdirectoryIds(child, directoriesMap));
+      }
+    }
+    return ids;
+  };
+
+  const buildDirectoriesMap = (directories) => {
+    const map = {};
+    const traverse = (dirs) => {
+      for (const dir of dirs) {
+        map[dir.id] = dir;
+        if (dir.children && dir.children.length > 0) {
+          traverse(dir.children);
+        }
+      }
+    };
+    traverse(directories);
+    return map;
+  };
+
+  const getTestCasesByDirectory = (directoryId, includeSubdirs = true) => {
+    if (!includeSubdirs) {
+      return allTestCases.filter(tc => tc.directory_id === directoryId);
+    }
+    
+    const directoriesMap = buildDirectoriesMap(directories);
+    const getDirectory = (id) => {
+      const findInDirs = (dirs) => {
+        for (const dir of dirs) {
+          if (dir.id === id) return dir;
+          if (dir.children) {
+            const found = findInDirs(dir.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      return findInDirs(directories);
+    };
+    
+    const directory = getDirectory(directoryId);
+    if (!directory) {
+      return allTestCases.filter(tc => tc.directory_id === directoryId);
+    }
+    
+    const allIds = getAllSubdirectoryIds(directory, directoriesMap);
+    return allTestCases.filter(tc => allIds.includes(tc.directory_id));
   };
 
   const getUnassignedTestCases = () => {
@@ -626,8 +675,13 @@ function TestCaseList() {
     
     const hasChildren = directory.children && directory.children.length > 0;
     const hasVisibleChildren = hasChildren && directory.children.some(child => matchesSearch(child, directorySearchTerm));
-    const directoryTestCases = getTestCasesByDirectory(directory.id);
-    const hasTestCases = directoryTestCases.length > 0;
+    
+    const allTestCasesInDir = getTestCasesByDirectory(directory.id, true);
+    const directTestCasesInDir = getTestCasesByDirectory(directory.id, false);
+    
+    const hasTestCases = allTestCasesInDir.length > 0;
+    const hasDirectTestCases = directTestCasesInDir.length > 0;
+    
     const isExpanded = expandedIds.has(directory.id);
     const isSelected = selectedDirectoryId === directory.id && selectedTestCaseId === null;
     const isDragOver = dragOverDirectory === directory.id;
@@ -663,7 +717,7 @@ function TestCaseList() {
             {directory.name}
           </span>
           {hasTestCases && (
-            <span className="test-case-count">({directoryTestCases.length})</span>
+            <span className="test-case-count">({allTestCasesInDir.length})</span>
           )}
           <div className="node-actions">
             <button
@@ -697,7 +751,7 @@ function TestCaseList() {
         {isExpanded && (
           <div className="directory-tree-children">
             {hasVisibleChildren && directory.children.map(child => renderDirectoryItem(child, level + 1))}
-            {hasTestCases && directoryTestCases.map(tc => renderTestCaseItem(tc, level + 1, true))}
+            {hasDirectTestCases && directTestCasesInDir.map(tc => renderTestCaseItem(tc, level + 1, true))}
           </div>
         )}
       </div>

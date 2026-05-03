@@ -28,6 +28,16 @@ db = SQLAlchemy(app)
 CORS(app)
 
 
+def safe_str(value):
+    """安全转换为字符串，处理None和特殊字符"""
+    if value is None:
+        return ''
+    try:
+        return str(value)
+    except Exception:
+        return ''
+
+
 class TestCaseDirectory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -70,18 +80,47 @@ class TestCase(db.Model):
         except AttributeError:
             priority = 'P0'
         
+        try:
+            steps = json.loads(self.steps) if self.steps else []
+            if not isinstance(steps, list):
+                steps = []
+        except (json.JSONDecodeError, TypeError):
+            steps = []
+        
+        try:
+            expected_results = json.loads(self.expected_results) if self.expected_results else []
+            if not isinstance(expected_results, list):
+                expected_results = []
+        except (json.JSONDecodeError, TypeError):
+            expected_results = []
+        
+        try:
+            created_at = self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        except Exception:
+            created_at = ''
+        
+        try:
+            updated_at = self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else ''
+        except Exception:
+            updated_at = ''
+        
+        try:
+            directory_name = self.directory.name if self.directory else None
+        except Exception:
+            directory_name = None
+        
         return {
             'id': self.id,
-            'name': self.name,
-            'preconditions': self.preconditions,
-            'steps': json.loads(self.steps) if self.steps else [],
-            'expected_results': json.loads(self.expected_results) if self.expected_results else [],
-            'description': getattr(self, 'description', None),
+            'name': safe_str(self.name),
+            'preconditions': safe_str(self.preconditions),
+            'steps': steps,
+            'expected_results': expected_results,
+            'description': safe_str(getattr(self, 'description', None)),
             'priority': priority,
             'directory_id': self.directory_id,
-            'directory_name': self.directory.name if self.directory else None,
-            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            'directory_name': directory_name,
+            'created_at': created_at,
+            'updated_at': updated_at
         }
 
 
@@ -356,16 +395,6 @@ def get_column_letter(n):
         result.append(chr(ord('A') + (n % 26)))
         n = n // 26
     return ''.join(reversed(result))
-
-
-def safe_str(value):
-    """安全转换为字符串，处理None和特殊字符"""
-    if value is None:
-        return ''
-    try:
-        return str(value)
-    except Exception:
-        return ''
 
 
 def create_excel_report(test_cases):
