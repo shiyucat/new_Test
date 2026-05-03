@@ -310,12 +310,6 @@ def move_directory(id):
         
         if is_descendant(id, new_parent_id):
             return jsonify({'error': '不能将目录移动到自己的子目录下面'}), 400
-        
-        current_depth = get_directory_depth(id)
-        new_parent_depth = get_directory_depth(new_parent_id)
-        
-        if new_parent_depth >= current_depth:
-            return jsonify({'error': '只能从深层级目录移动到浅层级目录'}), 400
     
     directory.parent_id = new_parent_id
     db.session.commit()
@@ -354,70 +348,86 @@ def batch_move_testcases():
     })
 
 
+def get_column_letter(n):
+    """将数字转换为Excel列字母 (1=A, 2=B, ..., 26=Z, 27=AA, etc.)"""
+    result = []
+    while n > 0:
+        n -= 1
+        result.append(chr(ord('A') + (n % 26)))
+        n = n // 26
+    return ''.join(reversed(result))
+
+
 def create_excel_report(test_cases):
     """创建Excel报告"""
     if not HAS_OPENPYXL:
         return None
     
-    wb = Workbook()
-    ws = wb.active
-    ws.title = '测试用例'
-    
-    header_font = Font(bold=True, size=12)
-    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-    header_font_white = Font(bold=True, size=12, color='FFFFFF')
-    center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-    
-    headers = ['用例ID', '用例名称', '用例等级', '前置条件', '测试步骤', '预期结果', '描述', '目录', '创建时间', '编辑时间']
-    for col_num, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_num, value=header)
-        cell.font = header_font_white
-        cell.fill = header_fill
-        cell.alignment = center_alignment
-        cell.border = thin_border
-    
-    for row_num, test_case in enumerate(test_cases, 2):
-        steps = test_case.get('steps', [])
-        expected_results = test_case.get('expected_results', [])
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = '测试用例'
         
-        steps_text = ''
-        for i, step in enumerate(steps, 1):
-            steps_text += f'{i}. {step}\n'
+        header_font = Font(bold=True, size=12)
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font_white = Font(bold=True, size=12, color='FFFFFF')
+        center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
         
-        expected_text = ''
-        for i, result in enumerate(expected_results, 1):
-            expected_text += f'{i}. {result}\n'
-        
-        row_data = [
-            test_case.get('id', ''),
-            test_case.get('name', ''),
-            test_case.get('priority', 'P0'),
-            test_case.get('preconditions', ''),
-            steps_text.strip(),
-            expected_text.strip(),
-            test_case.get('description', ''),
-            test_case.get('directory_name', '未分配'),
-            test_case.get('created_at', ''),
-            test_case.get('updated_at', '')
-        ]
-        
-        for col_num, value in enumerate(row_data, 1):
-            cell = ws.cell(row=row_num, column=col_num, value=value)
-            cell.alignment = left_alignment if col_num in [2, 4, 5, 6, 7, 8] else center_alignment
+        headers = ['用例ID', '用例名称', '用例等级', '前置条件', '测试步骤', '预期结果', '描述', '目录', '创建时间', '编辑时间']
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = header_font_white
+            cell.fill = header_fill
+            cell.alignment = center_alignment
             cell.border = thin_border
-    
-    column_widths = [8, 30, 10, 20, 40, 40, 20, 20, 20, 20]
-    for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[chr(64 + i) if i <= 26 else chr(64 + (i // 26)) + chr(64 + (i % 26))].width = width
-    
-    return wb
+        
+        for row_num, test_case in enumerate(test_cases, 2):
+            steps = test_case.get('steps', [])
+            expected_results = test_case.get('expected_results', [])
+            
+            steps_text = ''
+            for i, step in enumerate(steps, 1):
+                steps_text += f'{i}. {step}\n'
+            
+            expected_text = ''
+            for i, result in enumerate(expected_results, 1):
+                expected_text += f'{i}. {result}\n'
+            
+            row_data = [
+                test_case.get('id', ''),
+                test_case.get('name', ''),
+                test_case.get('priority', 'P0'),
+                test_case.get('preconditions', ''),
+                steps_text.strip(),
+                expected_text.strip(),
+                test_case.get('description', ''),
+                test_case.get('directory_name', '未分配'),
+                test_case.get('created_at', ''),
+                test_case.get('updated_at', '')
+            ]
+            
+            for col_num, value in enumerate(row_data, 1):
+                cell = ws.cell(row=row_num, column=col_num, value=value)
+                cell.alignment = left_alignment if col_num in [2, 4, 5, 6, 7, 8] else center_alignment
+                cell.border = thin_border
+        
+        column_widths = [8, 30, 10, 20, 40, 40, 20, 20, 20, 20]
+        for i, width in enumerate(column_widths, 1):
+            col_letter = get_column_letter(i)
+            ws.column_dimensions[col_letter].width = width
+        
+        return wb
+    except Exception as e:
+        print(f"创建Excel报告失败: {str(e)}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return None
 
 
 @app.route('/api/testcases/export', methods=['POST'])
