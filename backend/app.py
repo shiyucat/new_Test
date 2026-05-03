@@ -4,13 +4,21 @@ from flask_cors import CORS
 from datetime import datetime
 import json
 import os
+import sys
+import traceback
 from io import BytesIO
+
+HAS_OPENPYXL = False
+OPENPYXL_ERROR = None
 try:
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
     HAS_OPENPYXL = True
-except ImportError:
+except ImportError as e:
     HAS_OPENPYXL = False
+    OPENPYXL_ERROR = str(e)
+    print(f"openpyxl导入失败: {e}", file=sys.stderr)
+    print(f"Python路径: {sys.executable}", file=sys.stderr)
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -416,7 +424,10 @@ def create_excel_report(test_cases):
 def export_testcases():
     """导出测试用例为Excel"""
     if not HAS_OPENPYXL:
-        return jsonify({'error': '服务器未安装Excel导出依赖，请联系管理员'}), 500
+        error_msg = '服务器未安装Excel导出依赖（openpyxl）。'
+        if OPENPYXL_ERROR:
+            error_msg += f' 错误详情: {OPENPYXL_ERROR}'
+        return jsonify({'error': error_msg}), 500
     
     data = request.get_json()
     test_case_ids = data.get('test_case_ids', [])
@@ -424,22 +435,27 @@ def export_testcases():
     if not test_case_ids or len(test_case_ids) == 0:
         return jsonify({'error': '请选择至少一个测试用例'}), 400
     
-    test_cases = TestCase.query.filter(TestCase.id.in_(test_case_ids)).order_by(TestCase.created_at.desc()).all()
-    test_cases_data = [tc.to_dict() for tc in test_cases]
-    
-    wb = create_excel_report(test_cases_data)
-    if not wb:
-        return jsonify({'error': '创建Excel报告失败'}), 500
-    
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-    
-    return response
+    try:
+        test_cases = TestCase.query.filter(TestCase.id.in_(test_case_ids)).order_by(TestCase.created_at.desc()).all()
+        test_cases_data = [tc.to_dict() for tc in test_cases]
+        
+        wb = create_excel_report(test_cases_data)
+        if not wb:
+            return jsonify({'error': '创建Excel报告失败'}), 500
+        
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        
+        return response
+    except Exception as e:
+        print(f"导出Excel失败: {str(e)}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': f'导出失败: {str(e)}'}), 500
 
 
 @app.route('/api/testcases', methods=['GET'])
