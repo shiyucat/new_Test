@@ -358,12 +358,25 @@ def get_column_letter(n):
     return ''.join(reversed(result))
 
 
+def safe_str(value):
+    """安全转换为字符串，处理None和特殊字符"""
+    if value is None:
+        return ''
+    try:
+        return str(value)
+    except Exception:
+        return ''
+
+
 def create_excel_report(test_cases):
     """创建Excel报告"""
     if not HAS_OPENPYXL:
+        print("openpyxl未安装，无法创建Excel报告", file=sys.stderr)
         return None
     
     try:
+        print(f"开始创建Excel报告，共 {len(test_cases)} 条测试用例", file=sys.stderr)
+        
         wb = Workbook()
         ws = wb.active
         ws.title = '测试用例'
@@ -389,40 +402,53 @@ def create_excel_report(test_cases):
             cell.border = thin_border
         
         for row_num, test_case in enumerate(test_cases, 2):
-            steps = test_case.get('steps', [])
-            expected_results = test_case.get('expected_results', [])
-            
-            steps_text = ''
-            for i, step in enumerate(steps, 1):
-                steps_text += f'{i}. {step}\n'
-            
-            expected_text = ''
-            for i, result in enumerate(expected_results, 1):
-                expected_text += f'{i}. {result}\n'
-            
-            row_data = [
-                test_case.get('id', ''),
-                test_case.get('name', ''),
-                test_case.get('priority', 'P0'),
-                test_case.get('preconditions', ''),
-                steps_text.strip(),
-                expected_text.strip(),
-                test_case.get('description', ''),
-                test_case.get('directory_name', '未分配'),
-                test_case.get('created_at', ''),
-                test_case.get('updated_at', '')
-            ]
-            
-            for col_num, value in enumerate(row_data, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=value)
-                cell.alignment = left_alignment if col_num in [2, 4, 5, 6, 7, 8] else center_alignment
-                cell.border = thin_border
+            try:
+                steps = test_case.get('steps', [])
+                expected_results = test_case.get('expected_results', [])
+                
+                if not isinstance(steps, list):
+                    steps = []
+                if not isinstance(expected_results, list):
+                    expected_results = []
+                
+                steps_text = ''
+                for i, step in enumerate(steps, 1):
+                    step_str = safe_str(step)
+                    steps_text += f'{i}. {step_str}\n'
+                
+                expected_text = ''
+                for i, result in enumerate(expected_results, 1):
+                    result_str = safe_str(result)
+                    expected_text += f'{i}. {result_str}\n'
+                
+                row_data = [
+                    test_case.get('id', ''),
+                    safe_str(test_case.get('name', '')),
+                    safe_str(test_case.get('priority', 'P0')),
+                    safe_str(test_case.get('preconditions', '')),
+                    steps_text.strip(),
+                    expected_text.strip(),
+                    safe_str(test_case.get('description', '')),
+                    safe_str(test_case.get('directory_name', '未分配')),
+                    safe_str(test_case.get('created_at', '')),
+                    safe_str(test_case.get('updated_at', ''))
+                ]
+                
+                for col_num, value in enumerate(row_data, 1):
+                    cell = ws.cell(row=row_num, column=col_num, value=value)
+                    cell.alignment = left_alignment if col_num in [2, 4, 5, 6, 7, 8] else center_alignment
+                    cell.border = thin_border
+            except Exception as row_error:
+                print(f"处理第 {row_num} 行数据时出错: {str(row_error)}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                continue
         
         column_widths = [8, 30, 10, 20, 40, 40, 20, 20, 20, 20]
         for i, width in enumerate(column_widths, 1):
             col_letter = get_column_letter(i)
             ws.column_dimensions[col_letter].width = width
         
+        print("Excel报告创建成功", file=sys.stderr)
         return wb
     except Exception as e:
         print(f"创建Excel报告失败: {str(e)}", file=sys.stderr)
@@ -433,39 +459,95 @@ def create_excel_report(test_cases):
 @app.route('/api/testcases/export', methods=['POST'])
 def export_testcases():
     """导出测试用例为Excel"""
+    print("收到导出请求", file=sys.stderr)
+    
     if not HAS_OPENPYXL:
         error_msg = '服务器未安装Excel导出依赖（openpyxl）。'
         if OPENPYXL_ERROR:
             error_msg += f' 错误详情: {OPENPYXL_ERROR}'
+        print(f"导出错误: {error_msg}", file=sys.stderr)
         return jsonify({'error': error_msg}), 500
     
-    data = request.get_json()
-    test_case_ids = data.get('test_case_ids', [])
-    
-    if not test_case_ids or len(test_case_ids) == 0:
-        return jsonify({'error': '请选择至少一个测试用例'}), 400
-    
     try:
+        data = request.get_json(force=True, silent=True)
+        if data is None:
+            print("无法解析请求JSON", file=sys.stderr)
+            return jsonify({'error': '请求格式错误'}), 400
+        
+        test_case_ids = data.get('test_case_ids', [])
+        print(f"导出请求包含 {len(test_case_ids)} 个测试用例ID", file=sys.stderr)
+        
+        if not test_case_ids or len(test_case_ids) == 0:
+            return jsonify({'error': '请选择至少一个测试用例'}), 400
+        
         test_cases = TestCase.query.filter(TestCase.id.in_(test_case_ids)).order_by(TestCase.created_at.desc()).all()
-        test_cases_data = [tc.to_dict() for tc in test_cases]
+        print(f"从数据库查询到 {len(test_cases)} 条测试用例", file=sys.stderr)
+        
+        test_cases_data = []
+        for tc in test_cases:
+            try:
+                tc_dict = tc.to_dict()
+                test_cases_data.append(tc_dict)
+            except Exception as dict_error:
+                print(f"转换测试用例 {tc.id} 为字典时出错: {str(dict_error)}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+        
+        print(f"准备创建Excel报告，共 {len(test_cases_data)} 条有效数据", file=sys.stderr)
         
         wb = create_excel_report(test_cases_data)
         if not wb:
+            print("创建Excel报告失败，返回错误响应", file=sys.stderr)
             return jsonify({'error': '创建Excel报告失败'}), 500
+        
+        print("Excel报告创建成功，准备保存到内存", file=sys.stderr)
         
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         
-        response = make_response(output.getvalue())
-        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        file_content = output.getvalue()
+        file_size = len(file_content)
+        print(f"Excel文件大小: {file_size} 字节", file=sys.stderr)
         
+        response = make_response(file_content)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Length'] = str(file_size)
+        response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        print("导出响应准备完成，返回给客户端", file=sys.stderr)
         return response
     except Exception as e:
         print(f"导出Excel失败: {str(e)}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-        return jsonify({'error': f'导出失败: {str(e)}'}), 500
+        try:
+            return jsonify({'error': f'导出失败: {str(e)}'}), 500
+        except Exception as json_error:
+            print(f"构建错误响应时也失败: {str(json_error)}", file=sys.stderr)
+            return make_response(
+                f'{{"error": "导出失败: {str(e)}"}}', 
+                500, 
+                {'Content-Type': 'application/json'}
+            )
+
+
+@app.route('/api/testcases/all', methods=['GET'])
+def get_all_testcases():
+    directory_id = request.args.get('directory_id', type=int)
+    include_subdirs = request.args.get('include_subdirs', 'true', type=str).lower() == 'true'
+    
+    query = TestCase.query
+    if directory_id is not None:
+        if include_subdirs:
+            directory_ids = get_all_subdirectory_ids(directory_id)
+            query = query.filter(TestCase.directory_id.in_(directory_ids))
+        else:
+            query = query.filter_by(directory_id=directory_id)
+    
+    test_cases = query.order_by(TestCase.created_at.desc()).all()
+    return jsonify([tc.to_dict() for tc in test_cases])
 
 
 @app.route('/api/testcases', methods=['GET'])

@@ -4,9 +4,11 @@ import { Link, useNavigate } from 'react-router-dom';
 
 function TestCaseList() {
   const [testCases, setTestCases] = useState([]);
+  const [allTestCases, setAllTestCases] = useState([]);
   const [directories, setDirectories] = useState([]);
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [selectedDirectoryId, setSelectedDirectoryId] = useState(null);
+  const [selectedTestCaseId, setSelectedTestCaseId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -34,11 +36,14 @@ function TestCaseList() {
 
   useEffect(() => {
     fetchDirectories();
+    fetchAllTestCases();
   }, []);
 
   useEffect(() => {
-    fetchTestCases();
-  }, [selectedDirectoryId, currentPage, pageSize]);
+    if (selectedTestCaseId === null) {
+      fetchTestCases();
+    }
+  }, [selectedDirectoryId, currentPage, pageSize, selectedTestCaseId]);
 
   useEffect(() => {
     const handleMessage = (event) => {
@@ -65,6 +70,15 @@ function TestCaseList() {
       setDirectories(response.data);
     } catch (err) {
       console.error('Error fetching directories:', err);
+    }
+  };
+
+  const fetchAllTestCases = async () => {
+    try {
+      const response = await axios.get('/api/testcases/all');
+      setAllTestCases(response.data);
+    } catch (err) {
+      console.error('Error fetching all test cases:', err);
     }
   };
 
@@ -104,8 +118,15 @@ function TestCaseList() {
 
   const handleSelectDirectory = (id) => {
     setSelectedDirectoryId(id);
+    setSelectedTestCaseId(null);
     setCurrentPage(1);
-    setSelectedTestCases(new Set());
+  };
+
+  const handleSelectTestCase = (testCaseId, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setSelectedTestCaseId(testCaseId);
   };
 
   const handleAddRootDirectory = () => {
@@ -180,7 +201,7 @@ function TestCaseList() {
     return false;
   };
 
-  const handleSelectTestCase = (testCaseId, e) => {
+  const handleSelectTestCaseCheckbox = (testCaseId, e) => {
     e.stopPropagation();
     const newSelected = new Set(selectedTestCases);
     if (newSelected.has(testCaseId)) {
@@ -352,6 +373,7 @@ function TestCaseList() {
       }
       await axios.post('/api/testcases/batch/move', data);
       fetchTestCases();
+      fetchAllTestCases();
       setSelectedTestCases(new Set());
       setShowMoveModal(false);
       setTargetDirectoryId(null);
@@ -375,6 +397,7 @@ function TestCaseList() {
       }
       await axios.post('/api/testcases/batch/move', data);
       fetchTestCases();
+      fetchAllTestCases();
       fetchDirectories();
       setSelectedTestCases(new Set());
     } catch (err) {
@@ -529,6 +552,73 @@ function TestCaseList() {
     setDragOverAllCases(false);
   };
 
+  const getTestCasesByDirectory = (directoryId) => {
+    return allTestCases.filter(tc => tc.directory_id === directoryId);
+  };
+
+  const getUnassignedTestCases = () => {
+    return allTestCases.filter(tc => tc.directory_id === null);
+  };
+
+  const getSelectedTestCase = () => {
+    return allTestCases.find(tc => tc.id === selectedTestCaseId);
+  };
+
+  const renderTestCaseItem = (testCase, level = 0, isInTree = false) => {
+    const isSelected = selectedTestCaseId === testCase.id;
+    const isChecked = selectedTestCases.has(testCase.id);
+
+    return (
+      <div 
+        key={`testcase-${testCase.id}`}
+        className={`test-case-tree-item ${isSelected ? 'active' : ''}`}
+        style={{ paddingLeft: `${20 + level * 15}px` }}
+        onClick={(e) => {
+          if (!e.target.closest('.checkbox-wrapper') && !e.target.closest('.edit-btn-wrapper')) {
+            handleSelectTestCase(testCase.id, e);
+          }
+        }}
+        draggable={isInTree}
+        onDragStart={isInTree ? (e) => {
+          const idsToDrag = selectedTestCases.has(testCase.id) 
+            ? Array.from(selectedTestCases) 
+            : [testCase.id];
+          handleDragStart(e, 'testcase', { ids: idsToDrag });
+        } : undefined}
+        onDragEnd={isInTree ? handleDragEnd : undefined}
+      >
+        <span className="test-case-icon">📄</span>
+        <span 
+          className="node-name"
+          title={testCase.name}
+        >
+          {testCase.name}
+        </span>
+        <div className="test-case-actions">
+          <div className="checkbox-wrapper">
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={(e) => handleSelectTestCaseCheckbox(testCase.id, e)}
+              className="checkbox-input"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="edit-btn-wrapper">
+            <button
+              type="button"
+              className="edit-btn-small"
+              onClick={(e) => handleEditClick(testCase.id, e)}
+              title="编辑测试用例"
+            >
+              ⚙️
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderDirectoryItem = (directory, level = 0) => {
     if (!matchesSearch(directory, directorySearchTerm)) {
       return null;
@@ -536,8 +626,10 @@ function TestCaseList() {
     
     const hasChildren = directory.children && directory.children.length > 0;
     const hasVisibleChildren = hasChildren && directory.children.some(child => matchesSearch(child, directorySearchTerm));
+    const directoryTestCases = getTestCasesByDirectory(directory.id);
+    const hasTestCases = directoryTestCases.length > 0;
     const isExpanded = expandedIds.has(directory.id);
-    const isSelected = selectedDirectoryId === directory.id;
+    const isSelected = selectedDirectoryId === directory.id && selectedTestCaseId === null;
     const isDragOver = dragOverDirectory === directory.id;
 
     return (
@@ -553,7 +645,7 @@ function TestCaseList() {
           onDragLeave={(e) => handleDirectoryDragLeave(e, directory.id)}
           onDrop={(e) => handleDirectoryDrop(e, directory.id)}
         >
-          {hasVisibleChildren ? (
+          {(hasVisibleChildren || hasTestCases) ? (
             <span 
               className="node-toggle" 
               onClick={(e) => toggleExpand(directory.id, e)}
@@ -564,7 +656,15 @@ function TestCaseList() {
             <span className="node-toggle" style={{ visibility: 'hidden' }}>▶</span>
           )}
           <span className="node-icon">📁</span>
-          <span className="node-name">{directory.name}</span>
+          <span 
+            className="node-name"
+            title={directory.name}
+          >
+            {directory.name}
+          </span>
+          {hasTestCases && (
+            <span className="test-case-count">({directoryTestCases.length})</span>
+          )}
           <div className="node-actions">
             <button
               type="button"
@@ -593,9 +693,11 @@ function TestCaseList() {
             </button>
           </div>
         </div>
-        {hasVisibleChildren && isExpanded && (
+        
+        {isExpanded && (
           <div className="directory-tree-children">
-            {directory.children.map(child => renderDirectoryItem(child, level + 1))}
+            {hasVisibleChildren && directory.children.map(child => renderDirectoryItem(child, level + 1))}
+            {hasTestCases && directoryTestCases.map(tc => renderTestCaseItem(tc, level + 1, true))}
           </div>
         )}
       </div>
@@ -639,6 +741,217 @@ function TestCaseList() {
     });
   };
 
+  const renderTestCaseDetail = () => {
+    const testCase = getSelectedTestCase();
+    if (!testCase) return null;
+
+    return (
+      <div className="test-case-detail-container">
+        <div className="detail-header">
+          <h2 className="detail-title">{testCase.name}</h2>
+          <div className="detail-meta">
+            <span className={`priority-badge priority-${testCase.priority || 'P0'}`}>
+              {testCase.priority || 'P0'}
+            </span>
+            <span className="detail-directory">
+              目录: {testCase.directory_name || '未分配'}
+            </span>
+          </div>
+        </div>
+
+        {testCase.preconditions && (
+          <div className="detail-section">
+            <h4 className="detail-section-title">前置条件</h4>
+            <div className="detail-section-content">
+              {testCase.preconditions}
+            </div>
+          </div>
+        )}
+
+        <div className="detail-section">
+          <h4 className="detail-section-title">测试步骤</h4>
+          <div className="steps-detail-container">
+            {testCase.steps && testCase.steps.map((step, index) => (
+              <div key={index} className="step-detail-item">
+                <div className="step-detail-number">步骤 {index + 1}</div>
+                <div className="step-detail-content">
+                  <div className="step-detail-action">
+                    <strong>操作：</strong>{step}
+                  </div>
+                  {testCase.expected_results && testCase.expected_results[index] && (
+                    <div className="step-detail-expected">
+                      <strong>预期结果：</strong>{testCase.expected_results[index]}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {testCase.description && (
+          <div className="detail-section">
+            <h4 className="detail-section-title">描述</h4>
+            <div className="detail-section-content">
+              {testCase.description}
+            </div>
+          </div>
+        )}
+
+        <div className="detail-footer">
+          <div className="detail-time">
+            <span>创建时间: {testCase.created_at}</span>
+            <span>编辑时间: {testCase.updated_at}</span>
+          </div>
+          <button
+            type="button"
+            className="edit-detail-btn"
+            onClick={(e) => handleEditClick(testCase.id, e)}
+          >
+            编辑用例
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTestCaseList = () => {
+    if (loading) {
+      return <div className="loading">加载中...</div>;
+    }
+    
+    if (error) {
+      return <div className="error-message">{error}</div>;
+    }
+    
+    if (testCases.length === 0) {
+      return (
+        <div className="table-container">
+          <div className="empty-state">
+            <h3>暂无测试用例</h3>
+            <p>点击上方"新增测试用例"按钮创建第一个用例</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="table-container">
+          <div className="table-header">
+            <div className="table-row test-case-row-header">
+              <div style={{ width: '40px', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedTestCases.size === testCases.length && testCases.length > 0}
+                  onChange={handleSelectAll}
+                  className="checkbox-input"
+                />
+              </div>
+              <div>用例名称</div>
+              <div>用例等级</div>
+              <div>目录</div>
+              <div>创建时间</div>
+              <div>编辑时间</div>
+              <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
+            </div>
+          </div>
+          <div className="table-body">
+            {testCases.map((testCase) => (
+              <div 
+                key={testCase.id} 
+                className={`table-row test-case-row ${selectedTestCases.has(testCase.id) ? 'selected-row' : ''}`}
+                onClick={(e) => {
+                  if (!e.target.closest('.checkbox-input') && !e.target.closest('.edit-btn')) {
+                    handleSelectTestCase(testCase.id, e);
+                  }
+                }}
+                draggable
+                onDragStart={(e) => {
+                  const idsToDrag = selectedTestCases.has(testCase.id) 
+                    ? Array.from(selectedTestCases) 
+                    : [testCase.id];
+                  handleDragStart(e, 'testcase', { ids: idsToDrag });
+                }}
+                onDragEnd={handleDragEnd}
+              >
+                <div style={{ width: '40px', textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTestCases.has(testCase.id)}
+                    onChange={(e) => handleSelectTestCaseCheckbox(testCase.id, e)}
+                    className="checkbox-input"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="ellipsis-text" title={testCase.name}>{testCase.name}</div>
+                <div>
+                  <span className={`priority-badge priority-${testCase.priority || 'P0'}`}>
+                    {testCase.priority || 'P0'}
+                  </span>
+                </div>
+                <div className="ellipsis-text" title={testCase.directory_name || '未分配'}>
+                  {testCase.directory_name || '-'}
+                </div>
+                <div>{testCase.created_at}</div>
+                <div>{testCase.updated_at}</div>
+                <div style={{ width: '80px', textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="edit-btn"
+                    onClick={(e) => handleEditClick(testCase.id, e)}
+                    title="编辑测试用例"
+                  >
+                    ⚙️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {totalPages > 0 && (
+          <div className="pagination-container">
+            <div className="pagination-info">
+              共 {total} 条记录，第 {currentPage}/{totalPages || 1} 页
+            </div>
+            <div className="pagination-controls">
+              <select 
+                className="page-size-select" 
+                value={pageSize} 
+                onChange={handlePageSizeChange}
+              >
+                <option value={10}>10条/页</option>
+                <option value={20}>20条/页</option>
+                <option value={50}>50条/页</option>
+                <option value={100}>100条/页</option>
+              </select>
+              <div className="pagination">
+                <button 
+                  className="page-btn" 
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  上一页
+                </button>
+                <span className="page-info">
+                  第 {currentPage} 页
+                </span>
+                <button 
+                  className="page-btn" 
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="testcase-page-container">
       <div className="directory-sidebar">
@@ -653,14 +966,21 @@ function TestCaseList() {
         </div>
         <div className="directory-list-container">
           <div 
-            className={`directory-tree-node all-cases-node ${selectedDirectoryId === null ? 'active' : ''} ${dragOverAllCases ? 'drag-over' : ''}`}
-            onClick={() => handleSelectDirectory(null)}
+            className={`directory-tree-node all-cases-node ${selectedDirectoryId === null && selectedTestCaseId === null ? 'active' : ''} ${dragOverAllCases ? 'drag-over' : ''}`}
+            onClick={() => {
+              setSelectedDirectoryId(null);
+              setSelectedTestCaseId(null);
+            }}
             onDragOver={handleAllCasesDragOver}
             onDragLeave={handleAllCasesDragLeave}
             onDrop={handleAllCasesDrop}
           >
+            <span className="node-toggle" style={{ visibility: 'hidden' }}>▶</span>
             <span className="node-icon">📋</span>
             <span className="node-name">全部用例</span>
+            {getUnassignedTestCases().length > 0 && (
+              <span className="test-case-count">({getUnassignedTestCases().length})</span>
+            )}
             <button
               type="button"
               className="node-action-btn add-root-inline"
@@ -673,6 +993,7 @@ function TestCaseList() {
               +
             </button>
           </div>
+          
           {directories.map(directory => renderDirectoryItem(directory))}
         </div>
       </div>
@@ -711,125 +1032,10 @@ function TestCaseList() {
           )}
         </div>
         
-        {loading ? (
-          <div className="loading">加载中...</div>
-        ) : error ? (
-          <div className="error-message">{error}</div>
-        ) : testCases.length === 0 ? (
-          <div className="table-container">
-            <div className="empty-state">
-              <h3>暂无测试用例</h3>
-              <p>点击上方"新增测试用例"按钮创建第一个用例</p>
-            </div>
-          </div>
+        {selectedTestCaseId !== null ? (
+          renderTestCaseDetail()
         ) : (
-          <div>
-            <div className="table-container">
-              <div className="table-header">
-                <div className="table-row test-case-row-header">
-                  <div style={{ width: '40px', textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedTestCases.size === testCases.length && testCases.length > 0}
-                      onChange={handleSelectAll}
-                      className="checkbox-input"
-                    />
-                  </div>
-                  <div>用例名称</div>
-                  <div>用例等级</div>
-                  <div>目录</div>
-                  <div>创建时间</div>
-                  <div>编辑时间</div>
-                  <div style={{ width: '80px', textAlign: 'center' }}>操作</div>
-                </div>
-              </div>
-              <div className="table-body">
-                {testCases.map((testCase) => (
-                  <div 
-                    key={testCase.id} 
-                    className={`table-row test-case-row ${selectedTestCases.has(testCase.id) ? 'selected-row' : ''}`}
-                    draggable
-                    onDragStart={(e) => {
-                      const idsToDrag = selectedTestCases.has(testCase.id) 
-                        ? Array.from(selectedTestCases) 
-                        : [testCase.id];
-                      handleDragStart(e, 'testcase', { ids: idsToDrag });
-                    }}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <div style={{ width: '40px', textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedTestCases.has(testCase.id)}
-                        onChange={(e) => handleSelectTestCase(testCase.id, e)}
-                        className="checkbox-input"
-                      />
-                    </div>
-                    <div className="ellipsis-text" title={testCase.name}>{testCase.name}</div>
-                    <div>
-                      <span className={`priority-badge priority-${testCase.priority || 'P0'}`}>
-                        {testCase.priority || 'P0'}
-                      </span>
-                    </div>
-                    <div className="ellipsis-text" title={testCase.directory_name || '未分配'}>
-                      {testCase.directory_name || '-'}
-                    </div>
-                    <div>{testCase.created_at}</div>
-                    <div>{testCase.updated_at}</div>
-                    <div style={{ width: '80px', textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        className="edit-btn"
-                        onClick={(e) => handleEditClick(testCase.id, e)}
-                        title="编辑测试用例"
-                      >
-                        ⚙️
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {totalPages > 0 && (
-              <div className="pagination-container">
-                <div className="pagination-info">
-                  共 {total} 条记录，第 {currentPage}/{totalPages || 1} 页
-                </div>
-                <div className="pagination-controls">
-                  <select 
-                    className="page-size-select" 
-                    value={pageSize} 
-                    onChange={handlePageSizeChange}
-                  >
-                    <option value={10}>10条/页</option>
-                    <option value={20}>20条/页</option>
-                    <option value={50}>50条/页</option>
-                    <option value={100}>100条/页</option>
-                  </select>
-                  <div className="pagination">
-                    <button 
-                      className="page-btn" 
-                      onClick={() => goToPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      上一页
-                    </button>
-                    <span className="page-info">
-                      第 {currentPage} 页
-                    </span>
-                    <button 
-                      className="page-btn" 
-                      onClick={() => goToPage(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                    >
-                      下一页
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          renderTestCaseList()
         )}
       </div>
 

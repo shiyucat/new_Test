@@ -1540,3 +1540,264 @@ body {
 .directory-tree-node .node-actions button {
   cursor: pointer;
 }
+
+.test-case-tree-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 15px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.test-case-tree-item:hover {
+  background-color: #f8f9fa;
+}
+
+.test-case-tree-item.active {
+  background-color: #e8f4fc;
+  border-left: 3px solid #3498db;
+}
+
+.test-case-icon {
+  font-size: 0.9rem;
+  margin-right: 8px;
+  color: #3498db;
+}
+
+.test-case-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.test-case-tree-item:hover .test-case-actions {
+  opacity: 1;
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.edit-btn-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.edit-btn-small {
+  background-color: transparent;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.edit-btn-small:hover {
+  background-color: #ecf0f1;
+}
+
+.test-case-count {
+  font-size: 0.8rem;
+  color: #7f8c8d;
+  margin-left: 5px;
+  background-color: #ecf0f1;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.test-case-detail-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+}
+
+.detail-header {
+  border-bottom: 2px solid #ecf0f1;
+  padding-bottom: 20px;
+  margin-bottom: 25px;
+}
+
+.detail-title {
+  font-size: 1.5rem;
+  color: #2c3e50;
+  margin-bottom: 15px;
+  word-break: break-word;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.detail-directory {
+  color: #7f8c8d;
+  font-size: 0.95rem;
+}
+
+.detail-section {
+  margin-bottom: 25px;
+}
+
+.detail-section-title {
+  font-size: 1.1rem;
+  color: #2c3e50;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.detail-section-content {
+  color: #34495e;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.steps-detail-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.step-detail-item {
+  background-color: #fafafa;
+  border-radius: 6px;
+  padding: 15px;
+  border-left: 3px solid #3498db;
+}
+
+.step-detail-number {
+  font-weight: 600;
+  color: #3498db;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.step-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-detail-action {
+  color: #34495e;
+  line-height: 1.5;
+}
+
+.step-detail-expected {
+  color: #27ae60;
+  line-height: 1.5;
+  padding-left: 10px;
+  border-left: 2px solid #27ae60;
+  background-color: #d5f4e6;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+.detail-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 2px solid #ecf0f1;
+  margin-top: 30px;
+}
+
+.detail-time {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.edit-detail-btn {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 25px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.edit-detail-btn:hover {
+  background-color: #2980b9;
+}
+
+.directory-tree-node .node-name {
+  min-width: 1em;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-size: 0.9rem;
+  color: #2c3e50;
+}
+
+.directory-tree-node .node-name:hover {
+  overflow: visible;
+  white-space: normal;
+  position: relative;
+  z-index: 100;
+}
+
+.test-case-tree-item .node-name {
+  min-width: 1em;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-size: 0.85rem;
+  color: #34495e;
+}
+
+.test-case-tree-item .node-name:hover {
+  overflow: visible;
+  white-space: normal;
+  position: relative;
+  z-index: 100;
+}
+
+.node-name {
+  position: relative;
+}
+
+.node-name[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #2c3e50;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+}
+
+.node-name[title]:hover::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  border: 5px solid transparent;
+  border-bottom-color: #2c3e50;
+  z-index: 1000;
+}
