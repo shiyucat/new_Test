@@ -17,6 +17,14 @@ function TestCaseList() {
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [directorySearchTerm, setDirectorySearchTerm] = useState('');
+  
+  const [selectedTestCases, setSelectedTestCases] = useState(new Set());
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showMoveDirectoryModal, setShowMoveDirectoryModal] = useState(false);
+  const [directoryToMove, setDirectoryToMove] = useState(null);
+  const [targetDirectoryId, setTargetDirectoryId] = useState(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  
   const navigate = useNavigate();
   const iframeRef = useRef(null);
 
@@ -33,11 +41,13 @@ function TestCaseList() {
       if (event.data && event.data.type === 'SELECT_DIRECTORY') {
         const directory = event.data.directory;
         if (directory) {
-          setSelectedDirectoryId(directory.id);
+          setTargetDirectoryId(directory.id);
         }
         setShowCreateModal(false);
+        setShowMoveDirectoryModal(false);
       } else if (event.data && event.data.type === 'CANCEL_DIRECTORY') {
         setShowCreateModal(false);
+        setShowMoveDirectoryModal(false);
       }
     };
 
@@ -91,6 +101,7 @@ function TestCaseList() {
   const handleSelectDirectory = (id) => {
     setSelectedDirectoryId(id);
     setCurrentPage(1);
+    setSelectedTestCases(new Set());
   };
 
   const handleAddRootDirectory = () => {
@@ -165,6 +176,143 @@ function TestCaseList() {
     return false;
   };
 
+  const handleSelectTestCase = (testCaseId, e) => {
+    e.stopPropagation();
+    const newSelected = new Set(selectedTestCases);
+    if (newSelected.has(testCaseId)) {
+      newSelected.delete(testCaseId);
+    } else {
+      newSelected.add(testCaseId);
+    }
+    setSelectedTestCases(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTestCases.size === testCases.length && testCases.length > 0) {
+      setSelectedTestCases(new Set());
+    } else {
+      const allIds = new Set(testCases.map(tc => tc.id));
+      setSelectedTestCases(allIds);
+    }
+  };
+
+  const handleExport = async () => {
+    if (selectedTestCases.size === 0) {
+      alert('请至少选择一个测试用例');
+      return;
+    }
+
+    try {
+      const testCaseIds = Array.from(selectedTestCases);
+      const response = await axios.post('/api/testcases/export', 
+        { test_case_ids: testCaseIds },
+        { responseType: 'blob' }
+      );
+
+      const contentDisposition = response.headers['content-disposition'];
+      let fileName = '测试用例.xlsx';
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename=(.+)/);
+        if (matches && matches[1]) {
+          fileName = matches[1];
+        }
+      }
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error exporting test cases:', err);
+      if (err.response && err.response.data) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            alert(data.error || '导出失败，请稍后重试');
+          } catch {
+            alert('导出失败，请稍后重试');
+          }
+        };
+        reader.readAsText(err.response.data);
+      } else {
+        alert('导出失败，请稍后重试');
+      }
+    }
+  };
+
+  const handleMoveDirectory = (directory, e) => {
+    e.stopPropagation();
+    setDirectoryToMove(directory);
+    setTargetDirectoryId(null);
+    setShowMoveDirectoryModal(true);
+  };
+
+  const confirmMoveDirectory = async () => {
+    if (!directoryToMove) return;
+
+    try {
+      setMoveLoading(true);
+      const data = {};
+      if (targetDirectoryId !== null) {
+        data.new_parent_id = targetDirectoryId;
+      }
+      await axios.post(`/api/directories/${directoryToMove.id}/move`, data);
+      fetchDirectories();
+      setShowMoveDirectoryModal(false);
+      setDirectoryToMove(null);
+      setTargetDirectoryId(null);
+    } catch (err) {
+      console.error('Error moving directory:', err);
+      if (err.response && err.response.data && err.response.data.error) {
+        alert(err.response.data.error);
+      } else {
+        alert('移动目录失败，请稍后重试');
+      }
+    } finally {
+      setMoveLoading(false);
+    }
+  };
+
+  const handleMoveTestCases = () => {
+    if (selectedTestCases.size === 0) {
+      alert('请至少选择一个测试用例');
+      return;
+    }
+    setTargetDirectoryId(null);
+    setShowMoveModal(true);
+  };
+
+  const confirmMoveTestCases = async () => {
+    if (selectedTestCases.size === 0) return;
+
+    try {
+      setMoveLoading(true);
+      const testCaseIds = Array.from(selectedTestCases);
+      const data = { test_case_ids: testCaseIds };
+      if (targetDirectoryId !== null) {
+        data.target_directory_id = targetDirectoryId;
+      }
+      await axios.post('/api/testcases/batch/move', data);
+      fetchTestCases();
+      setSelectedTestCases(new Set());
+      setShowMoveModal(false);
+      setTargetDirectoryId(null);
+    } catch (err) {
+      console.error('Error moving test cases:', err);
+      if (err.response && err.response.data && err.response.data.error) {
+        alert(err.response.data.error);
+      } else {
+        alert('移动测试用例失败，请稍后重试');
+      }
+    } finally {
+      setMoveLoading(false);
+    }
+  };
+
   const renderDirectoryItem = (directory, level = 0) => {
     if (!matchesSearch(directory, directorySearchTerm)) {
       return null;
@@ -205,6 +353,15 @@ function TestCaseList() {
             </button>
             <button
               type="button"
+              className="node-action-btn"
+              onClick={(e) => handleMoveDirectory(directory, e)}
+              title="移动目录"
+              style={{ fontSize: '11px' }}
+            >
+              ➡
+            </button>
+            <button
+              type="button"
               className="node-action-btn delete"
               onClick={(e) => handleDeleteDirectory(directory.id, e)}
               title="删除目录"
@@ -231,6 +388,32 @@ function TestCaseList() {
   const handlePageSizeChange = (e) => {
     setPageSize(parseInt(e.target.value));
     setCurrentPage(1);
+  };
+
+  const renderDirectorySelector = (directories, level = 0, excludeId = null) => {
+    return directories.map(directory => {
+      if (excludeId !== null && directory.id === excludeId) {
+        return null;
+      }
+      
+      return (
+        <div key={directory.id}>
+          <div 
+            className={`directory-selector-item ${targetDirectoryId === directory.id ? 'selected' : ''}`}
+            style={{ paddingLeft: `${20 + level * 20}px` }}
+            onClick={() => setTargetDirectoryId(directory.id)}
+          >
+            <span className="directory-selector-icon">📁</span>
+            <span className="directory-selector-name">{directory.name}</span>
+          </div>
+          {directory.children && directory.children.length > 0 && (
+            <div className="directory-selector-children">
+              {renderDirectorySelector(directory.children, level + 1, excludeId)}
+            </div>
+          )}
+        </div>
+      );
+    });
   };
 
   return (
@@ -269,9 +452,38 @@ function TestCaseList() {
       </div>
 
       <div className="testcase-main-content">
-        <Link to="/create" className="create-btn">
-          + 新增测试用例
-        </Link>
+        <div className="action-bar">
+          <Link to="/create" className="create-btn">
+            + 新增测试用例
+          </Link>
+          
+          {selectedTestCases.size > 0 && (
+            <div className="selected-actions">
+              <span className="selected-count">已选择 {selectedTestCases.size} 条</span>
+              <button 
+                className="action-btn export-btn"
+                onClick={handleExport}
+                title="导出选中的测试用例"
+              >
+                📥 导出
+              </button>
+              <button 
+                className="action-btn move-btn"
+                onClick={handleMoveTestCases}
+                title="移动选中的测试用例"
+              >
+                ➡ 移动
+              </button>
+              <button 
+                className="action-btn clear-btn"
+                onClick={() => setSelectedTestCases(new Set())}
+                title="取消选择"
+              >
+                ✕ 取消
+              </button>
+            </div>
+          )}
+        </div>
         
         {loading ? (
           <div className="loading">加载中...</div>
@@ -289,6 +501,14 @@ function TestCaseList() {
             <div className="table-container">
               <div className="table-header">
                 <div className="table-row test-case-row-header">
+                  <div style={{ width: '40px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTestCases.size === testCases.length && testCases.length > 0}
+                      onChange={handleSelectAll}
+                      className="checkbox-input"
+                    />
+                  </div>
                   <div>用例名称</div>
                   <div>用例等级</div>
                   <div>目录</div>
@@ -301,8 +521,16 @@ function TestCaseList() {
                 {testCases.map((testCase) => (
                   <div 
                     key={testCase.id} 
-                    className="table-row test-case-row"
+                    className={`table-row test-case-row ${selectedTestCases.has(testCase.id) ? 'selected-row' : ''}`}
                   >
+                    <div style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedTestCases.has(testCase.id)}
+                        onChange={(e) => handleSelectTestCase(testCase.id, e)}
+                        className="checkbox-input"
+                      />
+                    </div>
                     <div className="ellipsis-text" title={testCase.name}>{testCase.name}</div>
                     <div>
                       <span className={`priority-badge priority-${testCase.priority || 'P0'}`}>
@@ -401,6 +629,87 @@ function TestCaseList() {
                 disabled={!newDirectoryName || newDirectoryName.trim() === ''}
               >
                 确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMoveModal && (
+        <div className="modal-overlay" onClick={() => { setShowMoveModal(false); setTargetDirectoryId(null); }}>
+          <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">移动测试用例</h3>
+            <p className="modal-description">
+              已选择 <strong>{selectedTestCases.size}</strong> 个测试用例，请选择目标目录：
+            </p>
+            <div className="directory-selector-list">
+              <div 
+                className={`directory-selector-item ${targetDirectoryId === null ? 'selected' : ''}`}
+                style={{ paddingLeft: '20px' }}
+                onClick={() => setTargetDirectoryId(null)}
+              >
+                <span className="directory-selector-icon">📋</span>
+                <span className="directory-selector-name">无目录（移出目录）</span>
+              </div>
+              {renderDirectorySelector(directories, 0, null)}
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-cancel-btn"
+                onClick={() => { setShowMoveModal(false); setTargetDirectoryId(null); }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="modal-confirm-btn"
+                onClick={confirmMoveTestCases}
+                disabled={moveLoading}
+              >
+                {moveLoading ? '移动中...' : '确定移动'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMoveDirectoryModal && directoryToMove && (
+        <div className="modal-overlay" onClick={() => { setShowMoveDirectoryModal(false); setDirectoryToMove(null); setTargetDirectoryId(null); }}>
+          <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">移动目录</h3>
+            <p className="modal-description">
+              移动目录 <strong>{directoryToMove.name}</strong> 及其下所有用例，请选择目标目录：
+            </p>
+            <p className="modal-note">
+              注意：只能从深层级目录移动到浅层级目录，不能移动到自己的子目录下
+            </p>
+            <div className="directory-selector-list">
+              <div 
+                className={`directory-selector-item ${targetDirectoryId === null ? 'selected' : ''}`}
+                style={{ paddingLeft: '20px' }}
+                onClick={() => setTargetDirectoryId(null)}
+              >
+                <span className="directory-selector-icon">📋</span>
+                <span className="directory-selector-name">根目录</span>
+              </div>
+              {renderDirectorySelector(directories, 0, directoryToMove.id)}
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-cancel-btn"
+                onClick={() => { setShowMoveDirectoryModal(false); setDirectoryToMove(null); setTargetDirectoryId(null); }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="modal-confirm-btn"
+                onClick={confirmMoveDirectory}
+                disabled={moveLoading}
+              >
+                {moveLoading ? '移动中...' : '确定移动'}
               </button>
             </div>
           </div>

@@ -1,9 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
 import json
 import os
+from io import BytesIO
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -216,6 +223,223 @@ def get_all_subdirectory_ids(directory_id):
     
     get_children(directory_id)
     return result
+
+
+def get_directory_depth(directory_id):
+    """获取目录的深度（根目录深度为1）"""
+    if directory_id is None:
+        return 0
+    
+    depth = 1
+    directory = TestCaseDirectory.query.get(directory_id)
+    if not directory:
+        return 0
+    
+    while directory.parent_id is not None:
+        depth += 1
+        directory = TestCaseDirectory.query.get(directory.parent_id)
+        if not directory:
+            break
+    
+    return depth
+
+
+def is_descendant(ancestor_id, descendant_id):
+    """检查一个目录是否是另一个目录的后代"""
+    if ancestor_id is None or descendant_id is None:
+        return False
+    if ancestor_id == descendant_id:
+        return False
+    
+    descendant = TestCaseDirectory.query.get(descendant_id)
+    if not descendant:
+        return False
+    
+    while descendant.parent_id is not None:
+        if descendant.parent_id == ancestor_id:
+            return True
+        descendant = TestCaseDirectory.query.get(descendant.parent_id)
+        if not descendant:
+            break
+    
+    return False
+
+
+def get_directory_path(directory_id):
+    """获取目录的完整路径（如：根目录/子目录/孙子目录）"""
+    if directory_id is None:
+        return ''
+    
+    path = []
+    directory = TestCaseDirectory.query.get(directory_id)
+    if not directory:
+        return ''
+    
+    while directory:
+        path.insert(0, directory.name)
+        if directory.parent_id is None:
+            break
+        directory = TestCaseDirectory.query.get(directory.parent_id)
+    
+    return '/'.join(path)
+
+
+@app.route('/api/directories/<int:id>/move', methods=['POST'])
+def move_directory(id):
+    """移动目录到新的父目录"""
+    directory = TestCaseDirectory.query.get_or_404(id)
+    data = request.get_json()
+    
+    new_parent_id = data.get('new_parent_id')
+    
+    if new_parent_id is not None:
+        if new_parent_id == id:
+            return jsonify({'error': '不能将目录移动到自己下面'}), 400
+        
+        new_parent = TestCaseDirectory.query.get(new_parent_id)
+        if not new_parent:
+            return jsonify({'error': '目标目录不存在'}), 400
+        
+        if is_descendant(id, new_parent_id):
+            return jsonify({'error': '不能将目录移动到自己的子目录下面'}), 400
+        
+        current_depth = get_directory_depth(id)
+        new_parent_depth = get_directory_depth(new_parent_id)
+        
+        if new_parent_depth >= current_depth:
+            return jsonify({'error': '只能从深层级目录移动到浅层级目录'}), 400
+    
+    directory.parent_id = new_parent_id
+    db.session.commit()
+    
+    return jsonify({
+        'message': '目录移动成功',
+        'directory': directory.to_dict(include_children=False)
+    })
+
+
+@app.route('/api/testcases/batch/move', methods=['POST'])
+def batch_move_testcases():
+    """批量移动测试用例到目标目录"""
+    data = request.get_json()
+    
+    test_case_ids = data.get('test_case_ids', [])
+    target_directory_id = data.get('target_directory_id')
+    
+    if not test_case_ids or len(test_case_ids) == 0:
+        return jsonify({'error': '请选择至少一个测试用例'}), 400
+    
+    if target_directory_id is not None:
+        target_directory = TestCaseDirectory.query.get(target_directory_id)
+        if not target_directory:
+            return jsonify({'error': '目标目录不存在'}), 400
+    
+    test_cases = TestCase.query.filter(TestCase.id.in_(test_case_ids)).all()
+    for test_case in test_cases:
+        test_case.directory_id = target_directory_id
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': f'成功移动 {len(test_cases)} 个测试用例',
+        'moved_count': len(test_cases)
+    })
+
+
+def create_excel_report(test_cases):
+    """创建Excel报告"""
+    if not HAS_OPENPYXL:
+        return None
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = '测试用例'
+    
+    header_font = Font(bold=True, size=12)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font_white = Font(bold=True, size=12, color='FFFFFF')
+    center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    headers = ['用例ID', '用例名称', '用例等级', '前置条件', '测试步骤', '预期结果', '描述', '目录', '创建时间', '编辑时间']
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.font = header_font_white
+        cell.fill = header_fill
+        cell.alignment = center_alignment
+        cell.border = thin_border
+    
+    for row_num, test_case in enumerate(test_cases, 2):
+        steps = test_case.get('steps', [])
+        expected_results = test_case.get('expected_results', [])
+        
+        steps_text = ''
+        for i, step in enumerate(steps, 1):
+            steps_text += f'{i}. {step}\n'
+        
+        expected_text = ''
+        for i, result in enumerate(expected_results, 1):
+            expected_text += f'{i}. {result}\n'
+        
+        row_data = [
+            test_case.get('id', ''),
+            test_case.get('name', ''),
+            test_case.get('priority', 'P0'),
+            test_case.get('preconditions', ''),
+            steps_text.strip(),
+            expected_text.strip(),
+            test_case.get('description', ''),
+            test_case.get('directory_name', '未分配'),
+            test_case.get('created_at', ''),
+            test_case.get('updated_at', '')
+        ]
+        
+        for col_num, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col_num, value=value)
+            cell.alignment = left_alignment if col_num in [2, 4, 5, 6, 7, 8] else center_alignment
+            cell.border = thin_border
+    
+    column_widths = [8, 30, 10, 20, 40, 40, 20, 20, 20, 20]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i) if i <= 26 else chr(64 + (i // 26)) + chr(64 + (i % 26))].width = width
+    
+    return wb
+
+
+@app.route('/api/testcases/export', methods=['POST'])
+def export_testcases():
+    """导出测试用例为Excel"""
+    if not HAS_OPENPYXL:
+        return jsonify({'error': '服务器未安装Excel导出依赖，请联系管理员'}), 500
+    
+    data = request.get_json()
+    test_case_ids = data.get('test_case_ids', [])
+    
+    if not test_case_ids or len(test_case_ids) == 0:
+        return jsonify({'error': '请选择至少一个测试用例'}), 400
+    
+    test_cases = TestCase.query.filter(TestCase.id.in_(test_case_ids)).order_by(TestCase.created_at.desc()).all()
+    test_cases_data = [tc.to_dict() for tc in test_cases]
+    
+    wb = create_excel_report(test_cases_data)
+    if not wb:
+        return jsonify({'error': '创建Excel报告失败'}), 500
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    
+    return response
 
 
 @app.route('/api/testcases', methods=['GET'])
