@@ -209,55 +209,83 @@ function TestCaseList() {
     try {
       const testCaseIds = Array.from(selectedTestCases);
       const response = await axios.post('/api/testcases/export', 
-        { test_case_ids: testCaseIds }
+        { test_case_ids: testCaseIds },
+        { responseType: 'blob' }
       );
 
       const contentType = response.headers['content-type'];
       
       if (contentType && contentType.includes('application/json')) {
-        if (response.data && response.data.error) {
-          alert(response.data.error);
+        const text = await response.data.text();
+        const data = JSON.parse(text);
+        if (data && data.error) {
+          alert(data.error);
         }
         return;
       }
 
-      const blob = new Blob([response.data], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-      });
-      
-      const contentDisposition = response.headers['content-disposition'];
-      let fileName = '测试用例.xlsx';
-      if (contentDisposition) {
-        const matches = contentDisposition.match(/filename=(.+)/);
-        if (matches && matches[1]) {
-          fileName = matches[1];
+      if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml')) {
+        const contentDisposition = response.headers['content-disposition'];
+        let fileName = '测试用例.xlsx';
+        if (contentDisposition) {
+          const matches = contentDisposition.match(/filename=(.+)/);
+          if (matches && matches[1]) {
+            fileName = matches[1];
+          }
         }
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        return;
       }
 
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const text = await response.data.text();
+      try {
+        const data = JSON.parse(text);
+        if (data && data.error) {
+          alert(data.error);
+        } else {
+          alert('导出失败，请稍后重试');
+        }
+      } catch {
+        const contentDisposition = response.headers['content-disposition'];
+        let fileName = '测试用例.xlsx';
+        if (contentDisposition) {
+          const matches = contentDisposition.match(/filename=(.+)/);
+          if (matches && matches[1]) {
+            fileName = matches[1];
+          }
+        }
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
     } catch (err) {
       console.error('Error exporting test cases:', err);
       if (err.response) {
         if (err.response.data) {
-          if (typeof err.response.data === 'object' && err.response.data.error) {
+          if (err.response.data instanceof Blob) {
+            try {
+              const text = await err.response.data.text();
+              const data = JSON.parse(text);
+              alert(data.error || '导出失败，请稍后重试');
+            } catch {
+              alert('导出失败，请稍后重试');
+            }
+          } else if (typeof err.response.data === 'object' && err.response.data.error) {
             alert(err.response.data.error);
-          } else if (err.response.data instanceof Blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-              try {
-                const data = JSON.parse(reader.result);
-                alert(data.error || '导出失败，请稍后重试');
-              } catch {
-                alert('导出失败，请稍后重试');
-              }
-            };
-            reader.readAsText(err.response.data);
           } else {
             alert('导出失败，请稍后重试');
           }
