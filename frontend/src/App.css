@@ -1509,3 +1509,34 @@ body {
 .test-case-row {
   grid-template-columns: 40px 200px 100px 150px 1fr 1fr 80px !important;
 }
+
+/* 拖拽样式 */
+.drag-over {
+  background-color: #e8f4fc !important;
+  border: 2px dashed #3498db !important;
+}
+
+.directory-tree-node.drag-over {
+  background-color: #e8f4fc !important;
+  border-left: 3px solid #3498db !important;
+}
+
+.table-row.test-case-row {
+  cursor: grab;
+}
+
+.table-row.test-case-row:active {
+  cursor: grabbing;
+}
+
+.directory-tree-node {
+  cursor: grab;
+}
+
+.directory-tree-node:active {
+  cursor: grabbing;
+}
+
+.directory-tree-node .node-actions button {
+  cursor: pointer;
+}

@@ -25,6 +25,10 @@ function TestCaseList() {
   const [targetDirectoryId, setTargetDirectoryId] = useState(null);
   const [moveLoading, setMoveLoading] = useState(false);
   
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [dragOverDirectory, setDragOverDirectory] = useState(null);
+  const [dragOverAllCases, setDragOverAllCases] = useState(false);
+  
   const navigate = useNavigate();
   const iframeRef = useRef(null);
 
@@ -205,10 +209,22 @@ function TestCaseList() {
     try {
       const testCaseIds = Array.from(selectedTestCases);
       const response = await axios.post('/api/testcases/export', 
-        { test_case_ids: testCaseIds },
-        { responseType: 'blob' }
+        { test_case_ids: testCaseIds }
       );
 
+      const contentType = response.headers['content-type'];
+      
+      if (contentType && contentType.includes('application/json')) {
+        if (response.data && response.data.error) {
+          alert(response.data.error);
+        }
+        return;
+      }
+
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
       const contentDisposition = response.headers['content-disposition'];
       let fileName = '测试用例.xlsx';
       if (contentDisposition) {
@@ -218,7 +234,7 @@ function TestCaseList() {
         }
       }
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', fileName);
@@ -227,17 +243,27 @@ function TestCaseList() {
       document.body.removeChild(link);
     } catch (err) {
       console.error('Error exporting test cases:', err);
-      if (err.response && err.response.data) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const data = JSON.parse(reader.result);
-            alert(data.error || '导出失败，请稍后重试');
-          } catch {
+      if (err.response) {
+        if (err.response.data) {
+          if (typeof err.response.data === 'object' && err.response.data.error) {
+            alert(err.response.data.error);
+          } else if (err.response.data instanceof Blob) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                const data = JSON.parse(reader.result);
+                alert(data.error || '导出失败，请稍后重试');
+              } catch {
+                alert('导出失败，请稍后重试');
+              }
+            };
+            reader.readAsText(err.response.data);
+          } else {
             alert('导出失败，请稍后重试');
           }
-        };
-        reader.readAsText(err.response.data);
+        } else {
+          alert('导出失败，请稍后重试');
+        }
       } else {
         alert('导出失败，请稍后重试');
       }
@@ -313,6 +339,168 @@ function TestCaseList() {
     }
   };
 
+  const moveTestCasesToDirectory = async (testCaseIds, targetDirId) => {
+    try {
+      const data = { test_case_ids: testCaseIds };
+      if (targetDirId !== null) {
+        data.target_directory_id = targetDirId;
+      }
+      await axios.post('/api/testcases/batch/move', data);
+      fetchTestCases();
+      fetchDirectories();
+      setSelectedTestCases(new Set());
+    } catch (err) {
+      console.error('Error moving test cases via drag:', err);
+      if (err.response && err.response.data && err.response.data.error) {
+        alert(err.response.data.error);
+      } else {
+        alert('移动测试用例失败，请稍后重试');
+      }
+    }
+  };
+
+  const moveDirectoryToTarget = async (sourceDirId, targetDirId) => {
+    try {
+      const data = {};
+      if (targetDirId !== null) {
+        data.new_parent_id = targetDirId;
+      }
+      await axios.post(`/api/directories/${sourceDirId}/move`, data);
+      fetchDirectories();
+    } catch (err) {
+      console.error('Error moving directory via drag:', err);
+      if (err.response && err.response.data && err.response.data.error) {
+        alert(err.response.data.error);
+      } else {
+        alert('移动目录失败，请稍后重试');
+      }
+    }
+  };
+
+  const handleDragStart = (e, itemType, itemData) => {
+    e.stopPropagation();
+    setDraggedItem({ type: itemType, data: itemData });
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: itemType, data: itemData }));
+  };
+
+  const handleDragEnd = (e) => {
+    e.stopPropagation();
+    setDraggedItem(null);
+    setDragOverDirectory(null);
+    setDragOverAllCases(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDirectoryDragOver = (e, directoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDirectory(directoryId);
+    
+    if (!expandedIds.has(directoryId)) {
+      const newExpanded = new Set(expandedIds);
+      newExpanded.add(directoryId);
+      setExpandedIds(newExpanded);
+    }
+  };
+
+  const handleDirectoryDragLeave = (e, directoryId) => {
+    e.stopPropagation();
+    if (dragOverDirectory === directoryId) {
+      setDragOverDirectory(null);
+    }
+  };
+
+  const handleAllCasesDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverAllCases(true);
+  };
+
+  const handleAllCasesDragLeave = (e) => {
+    e.stopPropagation();
+    setDragOverAllCases(false);
+  };
+
+  const handleDirectoryDrop = async (e, targetDirId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem) {
+      try {
+        const dataStr = e.dataTransfer.getData('text/plain');
+        const data = JSON.parse(dataStr);
+        if (data.type === 'testcase') {
+          if (data.data && data.data.ids && data.data.ids.length > 0) {
+            await moveTestCasesToDirectory(data.data.ids, targetDirId);
+          }
+        } else if (data.type === 'directory') {
+          if (data.data && data.data.id !== targetDirId) {
+            await moveDirectoryToTarget(data.data.id, targetDirId);
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing drag data:', err);
+      }
+    } else {
+      if (draggedItem.type === 'testcase') {
+        if (draggedItem.data && draggedItem.data.ids && draggedItem.data.ids.length > 0) {
+          await moveTestCasesToDirectory(draggedItem.data.ids, targetDirId);
+        }
+      } else if (draggedItem.type === 'directory') {
+        if (draggedItem.data && draggedItem.data.id !== targetDirId) {
+          await moveDirectoryToTarget(draggedItem.data.id, targetDirId);
+        }
+      }
+    }
+    
+    setDraggedItem(null);
+    setDragOverDirectory(null);
+  };
+
+  const handleAllCasesDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!draggedItem) {
+      try {
+        const dataStr = e.dataTransfer.getData('text/plain');
+        const data = JSON.parse(dataStr);
+        if (data.type === 'testcase') {
+          if (data.data && data.data.ids && data.data.ids.length > 0) {
+            await moveTestCasesToDirectory(data.data.ids, null);
+          }
+        } else if (data.type === 'directory') {
+          if (data.data) {
+            await moveDirectoryToTarget(data.data.id, null);
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing drag data:', err);
+      }
+    } else {
+      if (draggedItem.type === 'testcase') {
+        if (draggedItem.data && draggedItem.data.ids && draggedItem.data.ids.length > 0) {
+          await moveTestCasesToDirectory(draggedItem.data.ids, null);
+        }
+      } else if (draggedItem.type === 'directory') {
+        if (draggedItem.data) {
+          await moveDirectoryToTarget(draggedItem.data.id, null);
+        }
+      }
+    }
+    
+    setDraggedItem(null);
+    setDragOverAllCases(false);
+  };
+
   const renderDirectoryItem = (directory, level = 0) => {
     if (!matchesSearch(directory, directorySearchTerm)) {
       return null;
@@ -322,13 +510,20 @@ function TestCaseList() {
     const hasVisibleChildren = hasChildren && directory.children.some(child => matchesSearch(child, directorySearchTerm));
     const isExpanded = expandedIds.has(directory.id);
     const isSelected = selectedDirectoryId === directory.id;
+    const isDragOver = dragOverDirectory === directory.id;
 
     return (
       <div key={directory.id} className="directory-tree-item">
         <div 
-          className={`directory-tree-node ${isSelected ? 'active' : ''}`}
+          className={`directory-tree-node ${isSelected ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
           onClick={() => handleSelectDirectory(directory.id)}
           style={{ paddingLeft: `${15 + level * 15}px` }}
+          draggable
+          onDragStart={(e) => handleDragStart(e, 'directory', { id: directory.id, name: directory.name })}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => handleDirectoryDragOver(e, directory.id)}
+          onDragLeave={(e) => handleDirectoryDragLeave(e, directory.id)}
+          onDrop={(e) => handleDirectoryDrop(e, directory.id)}
         >
           {hasVisibleChildren ? (
             <span 
@@ -430,8 +625,11 @@ function TestCaseList() {
         </div>
         <div className="directory-list-container">
           <div 
-            className={`directory-tree-node all-cases-node ${selectedDirectoryId === null ? 'active' : ''}`}
+            className={`directory-tree-node all-cases-node ${selectedDirectoryId === null ? 'active' : ''} ${dragOverAllCases ? 'drag-over' : ''}`}
             onClick={() => handleSelectDirectory(null)}
+            onDragOver={handleAllCasesDragOver}
+            onDragLeave={handleAllCasesDragLeave}
+            onDrop={handleAllCasesDrop}
           >
             <span className="node-icon">📋</span>
             <span className="node-name">全部用例</span>
@@ -522,6 +720,14 @@ function TestCaseList() {
                   <div 
                     key={testCase.id} 
                     className={`table-row test-case-row ${selectedTestCases.has(testCase.id) ? 'selected-row' : ''}`}
+                    draggable
+                    onDragStart={(e) => {
+                      const idsToDrag = selectedTestCases.has(testCase.id) 
+                        ? Array.from(selectedTestCases) 
+                        : [testCase.id];
+                      handleDragStart(e, 'testcase', { ids: idsToDrag });
+                    }}
+                    onDragEnd={handleDragEnd}
                   >
                     <div style={{ width: '40px', textAlign: 'center' }}>
                       <input
