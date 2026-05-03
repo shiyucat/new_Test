@@ -7,6 +7,7 @@ import os
 import sys
 import traceback
 from io import BytesIO
+import urllib.parse
 
 HAS_OPENPYXL = False
 OPENPYXL_ERROR = None
@@ -541,7 +542,11 @@ def export_testcases():
         response = make_response(file_content)
         response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         response.headers['Content-Length'] = str(file_size)
-        response.headers['Content-Disposition'] = f'attachment; filename=测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        
+        filename = f'测试用例_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        encoded_filename = urllib.parse.quote(filename, safe='')
+        response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
+        
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'

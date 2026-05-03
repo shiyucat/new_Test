@@ -1032,8 +1032,8 @@ function TestCaseList() {
             <span className="node-toggle" style={{ visibility: 'hidden' }}>▶</span>
             <span className="node-icon">📋</span>
             <span className="node-name">全部用例</span>
-            {getUnassignedTestCases().length > 0 && (
-              <span className="test-case-count">({getUnassignedTestCases().length})</span>
+            {allTestCases.length > 0 && (
+              <span className="test-case-count">({allTestCases.length})</span>
             )}
             <button
               type="button"
